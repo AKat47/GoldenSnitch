@@ -71,9 +71,10 @@ async function angelAuth(apiKey, clientId) {
   const totpSecret = process.env.ANGEL_TOTP_SECRET;
   if (!password || !totpSecret) throw new Error('ANGEL_PASSWORD / ANGEL_TOTP_SECRET env vars not set');
 
+  // clientId can be mobile number (e.g. 9876543210) or Angel One client ID (e.g. A123456)
   const body = await httpsPost('apiconnect.angelbroking.com', '/rest/auth/angelbroking/user/v1/loginByPassword', {
     clientcode: clientId,
-    password,
+    password,                          // Angel One PIN
     totp: totp(totpSecret)
   }, {
     'X-UserType': 'USER',

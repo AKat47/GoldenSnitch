@@ -467,13 +467,13 @@ canvas.price-chart{display:block;width:100%;height:320px;}
     <div id="angelStatus" style="margin-bottom:14px"></div>
     <div class="field"><label>API Key</label>
       <input id="aKey" type="password" placeholder="From smartapi.angelone.in → Create App" oninput="saveAngel()"></div>
-    <div class="field"><label>Client ID</label>
-      <input id="aClient" type="text" placeholder="Your Angel One login ID e.g. A123456" oninput="saveAngel()"></div>
-    <div style="padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px;color:var(--txt3);line-height:1.75;margin-bottom:14px">
-      <strong style="color:var(--txt2)">Also add these as Vercel env vars:</strong><br>
-      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_PASSWORD</span> ·
-      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_TOTP_SECRET</span><br>
-      <span style="font-size:11px">(TOTP secret = 32-char key from Angel One app → Profile → Security → Enable TOTP)</span>
+    <div class="field"><label>Mobile Number / Client ID</label>
+      <input id="aClient" type="text" placeholder="Your registered mobile number e.g. 9876543210" oninput="saveAngel()"></div>
+    <div style="padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px;color:var(--txt3);line-height:1.8;margin-bottom:14px">
+      <strong style="color:var(--txt2)">Add these as Vercel env vars:</strong><br>
+      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_PASSWORD</span> → your Angel One PIN (4-digit)<br>
+      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_TOTP_SECRET</span> → 32-char key from Angel One app<br>
+      <span style="font-size:11px;color:var(--txt3)">To get TOTP secret: Angel One app → My Profile → Login &amp; Security → Enable TOTP Authenticator → copy the 32-char key before scanning the QR code</span>
     </div>
     <button class="btn-primary" onclick="saveAngel();toast('✅ Angel One saved')" style="margin-bottom:20px">Save Angel One</button>
 
