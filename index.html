@@ -315,17 +315,88 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:999px;border:2px solid var(--bg);}
 
-@media(max-width:600px){
-  .hdr{padding:12px 16px;gap:10px;}
-  .logo span{display:none;}
-  .scan-all-btn span{display:none;}
-  .signal-top{grid-template-columns:1fr;gap:14px;}
-  .stats-row{grid-template-columns:1fr 1fr;}
-  .dma-row{grid-template-columns:1fr;}
-  .dma-cell{border-right:none;border-bottom:1px solid var(--border);}
-  .main{padding:16px 16px 48px;}
-  .signal-price{font-size:22px;}
+/* ── Progress bar ───────────────────────────────── */
+.progress-wrap{margin:16px 0;background:var(--bg3);border-radius:999px;height:6px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--gold),#f59e0b);border-radius:999px;transition:width .3s ease;}
+.progress-label{font-size:12px;color:var(--txt3);font-family:var(--mono);margin-top:6px;text-align:center;}
+
+/* ── Mobile: 2-row header ───────────────────────── */
+@media(max-width:640px){
+  /* Header becomes 2 rows */
+  .hdr{
+    flex-wrap:wrap;padding:12px 14px 10px;gap:10px;
+  }
+  .logo{flex-shrink:0;}
+  .logo span{font-size:15px;}
+  .hdr-actions{margin-left:auto;}
+  /* Search bar drops to full-width second row */
+  .ac-wrap{
+    order:3;flex:none;width:100%;max-width:100%;
+  }
+  /* Smaller action buttons */
+  .scan-all-btn{padding:8px 14px;font-size:12px;}
+  .theme-btn{padding:5px 9px;font-size:11px;}
+
+  /* Main padding */
+  .main{padding:14px 14px 56px;}
+
+  /* Signal hero */
+  .signal-top{grid-template-columns:1fr;gap:14px;padding:18px 16px 14px;}
+  .signal-badge{flex-direction:row;gap:14px;padding:14px 16px;text-align:left;min-width:0;}
+  .signal-badge-icon{font-size:22px;margin-bottom:0;}
   .signal-ticker{font-size:24px;}
+  .signal-price{font-size:20px;}
+
+  /* Stats: 2×2 */
+  .stats-row{grid-template-columns:1fr 1fr;}
+  .stat-cell:nth-child(2){border-right:none;}
+  .stat-cell:nth-child(3){border-top:1px solid var(--border);}
+  .stat-cell:nth-child(4){border-top:1px solid var(--border);border-right:none;}
+  .stat-val{font-size:17px;}
+
+  /* Chart shorter */
+  canvas.price-chart{height:220px;}
+  .chart-legend{display:none;}
+  .chart-header{padding:12px 14px;}
+
+  /* Results: single col */
+  .results-grid{grid-template-columns:1fr;}
+  .result-card{padding:14px 16px;}
+
+  /* Settings panel → bottom sheet */
+  .settings-panel{align-items:flex-end;}
+  .settings-box{
+    border-radius:20px 20px 0 0;max-width:100%;
+    padding:20px 18px 36px;max-height:88dvh;overflow-y:auto;
+  }
+  .btn-row{flex-direction:column;}
+  .btn-ghost{order:-1;}
+
+  /* Autocomplete drop full width */
+  .ac-drop{left:0;right:0;}
+
+  /* Splash */
+  .splash-icon{font-size:44px;}
+  .splash-title{font-size:19px;}
+  .splash-sub{font-size:13px;}
+
+  /* Scanner section */
+  .scanner-section{margin-top:20px;}
+  .section-title{font-size:16px;}
+  .filter-row{gap:6px;}
+  .filter-btn{padding:6px 13px;font-size:12px;}
+}
+
+/* ── Tablet tweaks ───────────────────────────────── */
+@media(min-width:641px) and (max-width:900px){
+  .ac-wrap{max-width:340px;}
+  .signal-top{padding:20px 22px 16px;}
+  .stats-row{grid-template-columns:repeat(2,1fr);}
+  .stat-cell:nth-child(2){border-right:none;}
+  .stat-cell:nth-child(3){border-top:1px solid var(--border);}
+  .stat-cell:nth-child(4){border-top:1px solid var(--border);border-right:none;}
+  canvas.price-chart{height:260px;}
+  .main{padding:20px 18px 48px;}
 }
 </style>
 </head>
@@ -921,42 +992,127 @@ function renderSignal(sym, name, candles, closes, dates, sma50, sma200, crosses)
 // ── Scan All ─────────────────────────────────────
 var _scanResults = {};
 var _scanFilter  = 'golden';
+var _nseStocks   = null; // cached full NSE list
+
+async function loadNseStocks() {
+  if (_nseStocks) return _nseStocks;
+  try {
+    var resp = await fetch('/api/stocks');
+    var json = await resp.json();
+    if (json.ok && json.stocks && json.stocks.length > 100) {
+      _nseStocks = json.stocks;
+      // Merge into NSE_STOCKS for autocomplete
+      json.stocks.forEach(function(s){
+        if (!NSE_STOCKS.find(function(r){ return r[0]===s.ticker; })) {
+          NSE_STOCKS.push([s.ticker, s.name]);
+        }
+      });
+      return _nseStocks;
+    }
+  } catch(e) {}
+  // Fallback to built-in list
+  return NSE_STOCKS.map(function(r){ return { ticker: r[0], name: r[1] }; });
+}
 
 async function startScanAll() {
   var btn = document.getElementById('scanAllBtn');
   btn.disabled = true;
-  btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></div> Scanning…';
+  btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;border-top-color:#fff"></div>';
 
+  // Step 1 — Load full NSE stock list
   document.getElementById('main').innerHTML =
     '<div class="spinner-wrap"><div class="spinner"></div>'
-    +'<div class="spin-txt">The Snitch is hunting across '+SCAN_LIST.length+' stocks…</div></div>';
+    +'<div class="spin-txt">Loading NSE stock universe…</div></div>';
 
-  try {
-    var resp = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbols: SCAN_LIST })
-    });
-    var json = await resp.json();
-    _scanResults = json.results || {};
+  var stocks = await loadNseStocks();
+  var symbols = stocks.map(function(s){ return s.ticker || s[0]; });
 
-    // Alert on fresh crosses
-    var freshGolden = Object.entries(_scanResults).filter(function(e){
-      return e[1].isGolden && e[1].lastCross && e[1].lastCross.type==='golden' && e[1].daysSince<=5;
-    });
-    if(freshGolden.length) {
-      var alertMsg = '⚡ *GoldenSnitch caught fresh crosses!*\n'
-        +freshGolden.map(function(e){
-          return '• '+e[0]+' ('+e[1].name+') — crossed '+e[1].daysSince+'d ago, '
-            +(e[1].pctSince>=0?'+':'')+e[1].pctSince.toFixed(1)+'% since';
-        }).join('\n');
-      sendNotify(alertMsg);
-    }
+  // Step 2 — Scan in batches of 25 with live progress
+  _scanResults = {};
+  var total     = symbols.length;
+  var batchSize = 25;
+  var done      = 0;
 
-    renderScanResults();
-  } catch(e) {
-    document.getElementById('main').innerHTML = '<div class="empty">⚠ Scan failed: '+e.message+'</div>';
+  function updateProgress() {
+    var pct = Math.round((done / total) * 100);
+    var golden = Object.values(_scanResults).filter(function(r){ return r.isGolden; }).length;
+    document.getElementById('main').innerHTML =
+      '<div style="padding:32px 20px 0;max-width:600px;margin:0 auto">'
+        +'<div style="font-size:18px;font-weight:700;margin-bottom:6px">⚡ Snitch is hunting…</div>'
+        +'<div style="font-size:13px;color:var(--txt3);margin-bottom:18px;font-family:var(--mono)">'
+          +done+' / '+total+' stocks scanned · '
+          +'<span style="color:var(--gold);font-weight:700">'+golden+' Golden Cross</span> found so far'
+        +'</div>'
+        +'<div class="progress-wrap"><div class="progress-fill" style="width:'+pct+'%"></div></div>'
+        +'<div class="progress-label">'+pct+'% complete</div>'
+        // Live results as they trickle in
+        +(golden > 0 ? renderLiveResults() : '')
+      +'</div>';
   }
+
+  function renderLiveResults() {
+    var entries = Object.entries(_scanResults)
+      .filter(function(e){ return e[1].isGolden && e[1].lastCross; })
+      .sort(function(a,b){ return (a[1].daysSince||9999)-(b[1].daysSince||9999); })
+      .slice(0, 12);
+    if (!entries.length) return '';
+    var fmt = function(n){ return Number(n).toLocaleString('en-IN',{maximumFractionDigits:2}); };
+    return '<div style="margin-top:20px">'
+      +'<div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;'
+        +'letter-spacing:.08em;font-family:var(--mono);margin-bottom:10px">Live results ↓</div>'
+      +'<div style="display:flex;flex-direction:column;gap:1px;background:var(--border);'
+        +'border-radius:12px;overflow:hidden;border:1px solid var(--border)">'
+        +entries.map(function(e){
+          var d = e[1];
+          var isFresh = d.daysSince != null && d.daysSince <= 5;
+          var pctCol  = d.pctSince != null ? (d.pctSince >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--txt3)';
+          return '<div style="background:var(--bg);padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="analyzeStock(\''+e[0]+'\')">'
+            +'<div style="width:38px;height:38px;border-radius:9px;background:var(--gold-dim);display:grid;place-items:center;font-size:18px;flex-shrink:0">⚡</div>'
+            +'<div style="flex:1;min-width:0">'
+              +'<div style="font-size:14px;font-weight:700;font-family:var(--mono)">'
+                +e[0]+(isFresh?'<span class="fresh-badge" style="margin-left:6px">'+(d.daysSince===0?'TODAY':d.daysSince+'d ago')+'</span>':'')
+              +'</div>'
+              +'<div style="font-size:12px;color:var(--txt3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(d.name||e[0])+'</div>'
+            +'</div>'
+            +(d.pctSince!=null?'<div style="font-size:15px;font-weight:700;font-family:var(--mono);color:'+pctCol+'">'+(d.pctSince>=0?'+':'')+d.pctSince.toFixed(1)+'%</div>':'')
+          +'</div>';
+        }).join('')
+      +'</div>'
+    +'</div>';
+  }
+
+  updateProgress();
+
+  for (var i = 0; i < symbols.length; i += batchSize) {
+    var batch = symbols.slice(i, i + batchSize);
+    try {
+      var resp = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: batch })
+      });
+      var json = await resp.json();
+      Object.assign(_scanResults, json.results || {});
+    } catch(e) { /* skip failed batch */ }
+    done = Math.min(i + batchSize, total);
+    updateProgress();
+  }
+
+  // WhatsApp alert for fresh golden crosses
+  var freshGolden = Object.entries(_scanResults).filter(function(e){
+    return e[1].isGolden && e[1].lastCross && e[1].lastCross.type==='golden' && e[1].daysSince<=5;
+  });
+  if (freshGolden.length) {
+    var alertMsg = '⚡ *GoldenSnitch caught fresh crosses!*\n'
+      +freshGolden.slice(0,10).map(function(e){
+        return '• '+e[0]+' ('+e[1].name+') — crossed '+e[1].daysSince+'d ago'
+          +(e[1].pctSince!=null?', '+(e[1].pctSince>=0?'+':'')+e[1].pctSince.toFixed(1)+'%':'');
+      }).join('\n')
+      +(freshGolden.length>10?'\n+ '+(freshGolden.length-10)+' more':'');
+    sendNotify(alertMsg);
+  }
+
+  renderScanResults();
 
   btn.disabled = false;
   btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
