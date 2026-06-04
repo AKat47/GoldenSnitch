@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Golden Cross Scanner</title>
+<title>GoldenSnitch</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -335,8 +335,8 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 <!-- ── Header ───────────────────────────────────── -->
 <header class="hdr">
   <div class="logo">
-    <div class="logo-mark">✦</div>
-    <span>Golden Cross</span>
+    <div class="logo-mark">⚡</div>
+    <span>GoldenSnitch</span>
   </div>
 
   <div class="ac-wrap" id="acWrap">
@@ -354,7 +354,7 @@ canvas.price-chart{display:block;width:100%;height:320px;}
   <div class="hdr-actions">
     <button class="scan-all-btn" id="scanAllBtn" onclick="startScanAll()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <span>Scan All</span>
+      <span>Catch 'em All</span>
     </button>
     <button onclick="showSettings()" title="WhatsApp alerts"
       style="width:36px;height:36px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:grid;place-items:center;font-size:16px;">🔔</button>
@@ -368,11 +368,12 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 <!-- ── Main ─────────────────────────────────────── -->
 <main class="main" id="main">
   <div class="splash">
-    <div class="splash-icon">✦</div>
-    <div class="splash-title">Golden Cross Scanner</div>
+    <div class="splash-icon">⚡</div>
+    <div class="splash-title">GoldenSnitch</div>
     <div class="splash-sub">
-      Search any NSE stock to see its 50 / 200 DMA crossover status, chart, and signal strength.<br><br>
-      Or tap <b>Scan All</b> to find every stock currently in a Golden Cross across Nifty 500.
+      Catch the Golden Cross before everyone else does.<br><br>
+      Search any NSE stock to see its 50 / 200 DMA crossover status, chart, and signal strength.
+      Or tap <b>Catch 'em All</b> to scan every stock for fresh crosses across Nifty 500.
     </div>
   </div>
 </main>
@@ -383,8 +384,8 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 <!-- Settings panel (hidden by default) -->
 <div class="settings-panel" id="settingsPanel" style="display:none" onclick="if(event.target===this)closeSettings()">
   <div class="settings-box">
-    <div class="settings-title">🔔 WhatsApp Alerts</div>
-    <div class="settings-sub">Get notified on WhatsApp when a fresh Golden Cross forms (crossed in last 5 days). Uses Twilio — same env vars as your main project.</div>
+    <div class="settings-title">🔔 Snitch Alerts</div>
+    <div class="settings-sub">Get a WhatsApp ping the moment a fresh Golden Cross forms — before anyone else sees it. Uses Twilio. Same env vars as your main project.</div>
     <div id="twilioStatus"></div>
     <div class="field"><label>Account SID</label><input id="tSid"   type="password" placeholder="ACxxxxxxxx" oninput="saveTwilio()"></div>
     <div class="field"><label>Auth Token</label> <input id="tTok"   type="password" placeholder="auth_token"  oninput="saveTwilio()"></div>
@@ -463,7 +464,7 @@ function sendNotify(msg) {
 }
 
 function testNotify() {
-  sendNotify('✦ Golden Cross Scanner — WhatsApp alerts are working! 🎉');
+  sendNotify('⚡ GoldenSnitch — Snitch alerts are live! The Snitch has been released. 🏆');
   toast('Test message sent!');
 }
 
@@ -928,7 +929,7 @@ async function startScanAll() {
 
   document.getElementById('main').innerHTML =
     '<div class="spinner-wrap"><div class="spinner"></div>'
-    +'<div class="spin-txt">Scanning '+SCAN_LIST.length+' stocks for Golden Cross signals…</div></div>';
+    +'<div class="spin-txt">The Snitch is hunting across '+SCAN_LIST.length+' stocks…</div></div>';
 
   try {
     var resp = await fetch('/api/scan', {
@@ -944,7 +945,7 @@ async function startScanAll() {
       return e[1].isGolden && e[1].lastCross && e[1].lastCross.type==='golden' && e[1].daysSince<=5;
     });
     if(freshGolden.length) {
-      var alertMsg = '✦ *Fresh Golden Cross Alerts*\n'
+      var alertMsg = '⚡ *GoldenSnitch caught fresh crosses!*\n'
         +freshGolden.map(function(e){
           return '• '+e[0]+' ('+e[1].name+') — crossed '+e[1].daysSince+'d ago, '
             +(e[1].pctSince>=0?'+':'')+e[1].pctSince.toFixed(1)+'% since';
@@ -958,7 +959,7 @@ async function startScanAll() {
   }
 
   btn.disabled = false;
-  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Scan All</span>';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
 }
 
 function renderScanResults() {
