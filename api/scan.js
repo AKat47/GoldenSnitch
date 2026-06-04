@@ -1,6 +1,6 @@
 // api/scan.js — Batch golden cross scan for a list of symbols
-// POST /api/scan  body: { symbols: ['RELIANCE','TCS',...] }
-// Returns each symbol's golden cross status
+// POST /api/scan  body: { symbols: ['RELIANCE','TCS',...], angelKey?, angelClient? }
+// Returns each symbol's golden cross status. Uses Angel One if credentials provided, else Yahoo.
 
 const https = require('https');
 
@@ -75,7 +75,7 @@ function analyseSymbol(closes, dates) {
   };
 }
 
-async function fetchCloses(sym) {
+async function fetchClosesYahoo(sym) {
   const ticker = sym + '.NS';
   const to   = Math.floor(Date.now() / 1000);
   const from = to - 420 * 86400;
@@ -84,7 +84,7 @@ async function fetchCloses(sym) {
   const json = await httpsGet(url);
   const result = json?.chart?.result?.[0];
   if (!result) return null;
-  const ts     = result.timestamp   || [];
+  const ts     = result.timestamp || [];
   const closes = result.indicators?.quote?.[0]?.close || [];
   const dates  = ts.map(t => new Date(t * 1000).toISOString().split('T')[0]);
   const paired = ts.map((_, i) => ({ date: dates[i], close: closes[i] }))
@@ -93,14 +93,34 @@ async function fetchCloses(sym) {
            name: result.meta?.longName || result.meta?.shortName || sym };
 }
 
+// Delegate to /api/data for Angel One support (reuses its auth + fallback logic)
+async function fetchCloses(sym, angelKey, angelClient) {
+  // If Angel credentials provided, call our own /api/data endpoint
+  if (angelKey && angelClient) {
+    try {
+      const qs  = `?symbol=${encodeURIComponent(sym)}&angelKey=${encodeURIComponent(angelKey)}&angelClient=${encodeURIComponent(angelClient)}`;
+      const url = `http://localhost:3000/api/data${qs}`; // will use same serverless runtime
+      const json = await httpsGet(url);
+      if (json?.ok && json.candles?.length > 200) {
+        const closes = json.candles.map(c => c.close);
+        const dates  = json.candles.map(c => c.date);
+        return { closes, dates, name: json.name || sym };
+      }
+    } catch(e) { /* fall through to Yahoo */ }
+  }
+  return fetchClosesYahoo(sym);
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-  const symbols = (body?.symbols || []).slice(0, 100); // cap at 100
+  const body       = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+  const symbols    = (body?.symbols     || []).slice(0, 100);
+  const angelKey   = (body?.angelKey    || '').trim();
+  const angelClient= (body?.angelClient || '').trim();
 
   // Fetch in batches of 10 (parallel)
   const results = {};
@@ -109,7 +129,7 @@ module.exports = async (req, res) => {
     const batch = symbols.slice(i, i + batchSize);
     await Promise.all(batch.map(async sym => {
       try {
-        const data = await fetchCloses(sym);
+        const data = await fetchCloses(sym, angelKey, angelClient);
         if (!data || data.closes.length < 201) return;
         const analysis = analyseSymbol(data.closes, data.dates);
         if (analysis) results[sym] = { ...analysis, name: data.name };

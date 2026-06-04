@@ -454,18 +454,50 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 
 <!-- Settings panel (hidden by default) -->
 <div class="settings-panel" id="settingsPanel" style="display:none" onclick="if(event.target===this)closeSettings()">
-  <div class="settings-box">
-    <div class="settings-title">🔔 Snitch Alerts</div>
-    <div class="settings-sub">Get a WhatsApp ping the moment a fresh Golden Cross forms — before anyone else sees it. Uses Twilio. Same env vars as your main project.</div>
-    <div id="twilioStatus"></div>
+  <div class="settings-box" style="max-height:90dvh;overflow-y:auto">
+
+    <!-- Angel One section -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="width:36px;height:36px;border-radius:9px;background:var(--gold-dim);display:grid;place-items:center;font-size:18px;flex-shrink:0">🅐</div>
+      <div>
+        <div class="settings-title" style="margin-bottom:0">Angel One SmartAPI</div>
+        <div style="font-size:12px;color:var(--txt3);margin-top:2px">Real-time data · replaces Yahoo Finance 15-min delay</div>
+      </div>
+    </div>
+    <div id="angelStatus" style="margin-bottom:14px"></div>
+    <div class="field"><label>API Key</label>
+      <input id="aKey" type="password" placeholder="From smartapi.angelone.in → Create App" oninput="saveAngel()"></div>
+    <div class="field"><label>Client ID</label>
+      <input id="aClient" type="text" placeholder="Your Angel One login ID e.g. A123456" oninput="saveAngel()"></div>
+    <div style="padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px;color:var(--txt3);line-height:1.75;margin-bottom:14px">
+      <strong style="color:var(--txt2)">Also add these as Vercel env vars:</strong><br>
+      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_PASSWORD</span> ·
+      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_TOTP_SECRET</span><br>
+      <span style="font-size:11px">(TOTP secret = 32-char key from Angel One app → Profile → Security → Enable TOTP)</span>
+    </div>
+    <button class="btn-primary" onclick="saveAngel();toast('✅ Angel One saved')" style="margin-bottom:20px">Save Angel One</button>
+
+    <!-- Divider -->
+    <div style="height:1px;background:var(--border);margin-bottom:20px"></div>
+
+    <!-- Twilio section -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="width:36px;height:36px;border-radius:9px;background:rgba(0,200,5,.1);display:grid;place-items:center;font-size:18px;flex-shrink:0">💬</div>
+      <div>
+        <div class="settings-title" style="margin-bottom:0">🔔 Snitch Alerts</div>
+        <div style="font-size:12px;color:var(--txt3);margin-top:2px">WhatsApp ping on fresh Golden Cross · via Twilio</div>
+      </div>
+    </div>
+    <div id="twilioStatus" style="margin-bottom:14px"></div>
     <div class="field"><label>Account SID</label><input id="tSid"   type="password" placeholder="ACxxxxxxxx" oninput="saveTwilio()"></div>
     <div class="field"><label>Auth Token</label> <input id="tTok"   type="password" placeholder="auth_token"  oninput="saveTwilio()"></div>
     <div class="field"><label>From (Twilio WhatsApp)</label><input id="tFrom" type="text" placeholder="whatsapp:+14155238886" oninput="saveTwilio()"></div>
     <div class="field"><label>To (your WhatsApp)</label>    <input id="tTo"   type="text" placeholder="whatsapp:+919876543210" oninput="saveTwilio()"></div>
     <div class="btn-row">
-      <button class="btn-primary" onclick="testNotify()">Send Test Message</button>
+      <button class="btn-primary" onclick="testNotify()">Send Test</button>
       <button class="btn-ghost" onclick="closeSettings()">Close</button>
     </div>
+
   </div>
 </div>
 
@@ -486,6 +518,30 @@ function toast(msg) {
   setTimeout(function(){ el.classList.remove('show'); }, 2800);
 }
 
+// ── Angel One settings ───────────────────────────
+var AO = {
+  apiKey:   localStorage.getItem('gc_angel_key')    || '',
+  clientId: localStorage.getItem('gc_angel_client') || ''
+};
+
+function saveAngel() {
+  AO.apiKey   = document.getElementById('aKey').value.trim();
+  AO.clientId = document.getElementById('aClient').value.trim();
+  localStorage.setItem('gc_angel_key',    AO.apiKey);
+  localStorage.setItem('gc_angel_client', AO.clientId);
+  renderAngelStatus();
+}
+
+function renderAngelStatus() {
+  var box = document.getElementById('angelStatus');
+  if (!box) return;
+  if (AO.apiKey && AO.clientId) {
+    box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--green-dim);border-radius:var(--r);font-size:13px;font-weight:600;color:var(--green)">✓ Configured — real-time data active</div>';
+  } else {
+    box.innerHTML = '<div style="padding:10px 14px;background:var(--gold-dim);border-radius:var(--r);font-size:12.5px;color:var(--gold)">⚠ Not configured — using Yahoo Finance (15-min delay)</div>';
+  }
+}
+
 // ── Twilio settings ──────────────────────────────
 var TW = {
   sid:  localStorage.getItem('gc_twilio_sid')  || '',
@@ -495,10 +551,13 @@ var TW = {
 };
 
 function showSettings() {
-  document.getElementById('tSid').value  = TW.sid;
-  document.getElementById('tTok').value  = TW.tok;
-  document.getElementById('tFrom').value = TW.from;
-  document.getElementById('tTo').value   = TW.to;
+  document.getElementById('aKey').value    = AO.apiKey;
+  document.getElementById('aClient').value = AO.clientId;
+  document.getElementById('tSid').value    = TW.sid;
+  document.getElementById('tTok').value    = TW.tok;
+  document.getElementById('tFrom').value   = TW.from;
+  document.getElementById('tTo').value     = TW.to;
+  renderAngelStatus();
   renderTwilioStatus();
   document.getElementById('settingsPanel').style.display = 'flex';
 }
@@ -878,9 +937,13 @@ async function analyzeStock(sym) {
   document.getElementById('main').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div><div class="spin-txt">Fetching data for '+sym+'…</div></div>';
 
   try {
-    var resp = await fetch('/api/data?symbol='+encodeURIComponent(sym));
+    var qs = '?symbol='+encodeURIComponent(sym);
+    if (AO.apiKey)   qs += '&angelKey='+encodeURIComponent(AO.apiKey);
+    if (AO.clientId) qs += '&angelClient='+encodeURIComponent(AO.clientId);
+    var resp = await fetch('/api/data'+qs);
     var json = await resp.json();
     if(!json.ok) throw new Error(json.error||'Failed to fetch');
+    var dataSource = json.source === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
 
     var candles = json.candles;
     if(candles.length < 201) throw new Error('Not enough history (need 200+ days). Try a more liquid stock.');
@@ -970,7 +1033,7 @@ function renderSignal(sym, name, candles, closes, dates, sma50, sma200, crosses)
 
     +'<div class="chart-card">'
       +'<div class="chart-header">'
-        +'<div class="chart-title">Price + 50 / 200 DMA · Last 200 days</div>'
+        +'<div class="chart-title">Price + 50 / 200 DMA · Last 200 days &nbsp;<span style="font-size:11px;font-weight:500;color:var(--txt3)">'+dataSource+'</span></div>'
         +'<div class="chart-legend">'
           +'<div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div>50 DMA</div>'
           +'<div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>200 DMA</div>'
@@ -1089,7 +1152,11 @@ async function startScanAll() {
       var resp = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: batch })
+        body: JSON.stringify({
+          symbols:     batch,
+          angelKey:    AO.apiKey    || undefined,
+          angelClient: AO.clientId  || undefined
+        })
       });
       var json = await resp.json();
       Object.assign(_scanResults, json.results || {});
