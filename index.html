@@ -224,9 +224,7 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 .filter-btn.active-death{background:var(--red);color:#fff;border-color:var(--red);}
 
 .results-grid{
-  display:grid;gap:1px;background:var(--border);
-  border-radius:var(--rl);overflow:hidden;
-  border:1px solid var(--border);
+  display:grid;gap:12px;
 }
 @media(min-width:700px){
   .results-grid{grid-template-columns:repeat(2,1fr);}
@@ -235,11 +233,13 @@ canvas.price-chart{display:block;width:100%;height:320px;}
   .results-grid{grid-template-columns:repeat(3,1fr);}
 }
 .result-card{
-  background:var(--bg);padding:18px 20px;
-  cursor:pointer;transition:background .12s;
+  background:var(--bg);padding:16px 18px;
+  border:1px solid var(--border);border-radius:var(--rl);
+  cursor:pointer;transition:background .12s,border-color .12s;
   display:flex;align-items:center;gap:14px;
+  min-width:0;overflow:hidden;
 }
-.result-card:hover{background:var(--bg2);}
+.result-card:hover{background:var(--bg2);border-color:var(--border2);}
 .result-icon{
   width:44px;height:44px;border-radius:10px;
   display:grid;place-items:center;font-size:20px;flex-shrink:0;
@@ -926,7 +926,7 @@ function drawChart(candles, sma50, sma200, crosses, isDark) {
 }
 
 // ── Analyze single stock ─────────────────────────
-var _currentCandles=null, _currentSym=null;
+var _currentCandles=null, _currentSym=null, _currentDataSource='Yahoo Finance';
 
 async function analyzeStock(sym) {
   sym = sym.toUpperCase().trim();
@@ -943,7 +943,7 @@ async function analyzeStock(sym) {
     var resp = await fetch('/api/data'+qs);
     var json = await resp.json();
     if(!json.ok) throw new Error(json.error||'Failed to fetch');
-    var dataSource = json.source === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
+    _currentDataSource = json.source === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
 
     var candles = json.candles;
     if(candles.length < 201) throw new Error('Not enough history (need 200+ days). Try a more liquid stock.');
@@ -1033,7 +1033,7 @@ function renderSignal(sym, name, candles, closes, dates, sma50, sma200, crosses)
 
     +'<div class="chart-card">'
       +'<div class="chart-header">'
-        +'<div class="chart-title">Price + 50 / 200 DMA · Last 200 days &nbsp;<span style="font-size:11px;font-weight:500;color:var(--txt3)">'+dataSource+'</span></div>'
+        +'<div class="chart-title">Price + 50 / 200 DMA · Last 200 days &nbsp;<span style="font-size:11px;font-weight:500;color:var(--txt3)">'+_currentDataSource+'</span></div>'
         +'<div class="chart-legend">'
           +'<div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div>50 DMA</div>'
           +'<div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>200 DMA</div>'
@@ -1123,13 +1123,12 @@ async function startScanAll() {
     return '<div style="margin-top:20px">'
       +'<div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;'
         +'letter-spacing:.08em;font-family:var(--mono);margin-bottom:10px">Live results ↓</div>'
-      +'<div style="display:flex;flex-direction:column;gap:1px;background:var(--border);'
-        +'border-radius:12px;overflow:hidden;border:1px solid var(--border)">'
+      +'<div style="display:flex;flex-direction:column;gap:8px;">'
         +entries.map(function(e){
           var d = e[1];
           var isFresh = d.daysSince != null && d.daysSince <= 5;
           var pctCol  = d.pctSince != null ? (d.pctSince >= 0 ? 'var(--green)' : 'var(--red)') : 'var(--txt3)';
-          return '<div style="background:var(--bg);padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="analyzeStock(\''+e[0]+'\')">'
+          return '<div style="background:var(--bg);padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;border:1px solid var(--border);border-radius:12px" onclick="analyzeStock(\''+e[0]+'\')">'
             +'<div style="width:38px;height:38px;border-radius:9px;background:var(--gold-dim);display:grid;place-items:center;font-size:18px;flex-shrink:0">⚡</div>'
             +'<div style="flex:1;min-width:0">'
               +'<div style="font-size:14px;font-weight:700;font-family:var(--mono)">'
