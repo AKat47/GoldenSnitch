@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>GoldenSnitch — Parameter Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script>(function(){var t=localStorage.getItem('gc_theme')||'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#ffffff;--bg2:#f7f8fa;--bg3:#eef0f4;--bg4:#e0e4ea;
+  --txt:#0b0d12;--txt2:#5b6472;--txt3:#98a0ad;
+  --border:#e6e8ec;--border2:#d4d8de;
+  --gold:#d97706;--gold-dim:rgba(217,119,6,.12);--gold-glow:rgba(251,191,36,.3);
+  --green:#00a854;--green-dim:rgba(0,168,84,.10);
+  --red:#e8443a;--red-dim:rgba(232,68,58,.10);
+  --blue:#3578f6;--blue-dim:rgba(53,120,246,.10);
+  --orange:#f97316;--orange-dim:rgba(249,115,22,.12);
+  --r:10px;--rl:16px;
+  --font:'Inter',-apple-system,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+  --shadow:0 1px 3px rgba(11,13,18,.05),0 8px 24px rgba(11,13,18,.06);
+}
+[data-theme="dark"]{
+  --bg:#07090c;--bg2:#11151c;--bg3:#181d26;--bg4:#1f242e;
+  --txt:#f5f7fa;--txt2:#99a2b1;--txt3:#5a6473;
+  --border:#1f242e;--border2:#2a313d;
+  --gold:#fbbf24;--gold-dim:rgba(251,191,36,.14);--gold-glow:rgba(251,191,36,.25);
+  --green:#34d399;--green-dim:rgba(52,211,153,.12);
+  --red:#ff6961;--red-dim:rgba(255,105,97,.16);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--font);
+  -webkit-font-smoothing:antialiased;letter-spacing:-0.01em;font-size:14px;
+  transition:background .2s,color .2s;}
+button{font-family:var(--font);cursor:pointer;border:0;background:transparent;color:inherit;}
+
+/* ── Header ─── */
+.hdr{display:flex;align-items:center;gap:10px;padding:14px 24px;border-bottom:1px solid var(--border);
+  background:var(--bg);position:sticky;top:0;z-index:50;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:800;letter-spacing:-0.03em;text-decoration:none;color:var(--txt);flex-shrink:0;}
+.logo-mark{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);display:grid;place-items:center;font-size:18px;box-shadow:0 4px 14px var(--gold-glow);}
+.logo span{background:linear-gradient(135deg,#f59e0b,#d97706);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.nav-link{padding:7px 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--txt2);text-decoration:none;white-space:nowrap;transition:all .12s;}
+.nav-link:hover{color:var(--txt);background:var(--bg2);}
+.nav-link.active{color:var(--gold);background:var(--gold-dim);}
+.hdr-right{display:flex;align-items:center;gap:8px;margin-left:auto;}
+.theme-toggle{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);}
+.theme-btn{padding:6px 10px;border-radius:999px;font-size:12px;font-weight:600;color:var(--txt3);background:transparent;appearance:none;border:none;cursor:pointer;transition:all .12s;}
+.theme-btn.active{background:var(--bg);color:var(--txt);box-shadow:0 1px 3px rgba(11,13,18,.08);}
+[data-theme="dark"] .theme-btn.active{background:var(--bg4);}
+
+/* ── Layout ─── */
+.main{padding:28px 24px 80px;max-width:1400px;margin:0 auto;}
+
+/* ── Config panel ─── */
+.config-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:24px 28px;margin-bottom:24px;}
+.config-title{font-size:20px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px;}
+.config-sub{font-size:13px;color:var(--txt2);line-height:1.6;margin-bottom:24px;}
+
+.params-row{display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start;}
+
+.param-group{display:flex;flex-direction:column;gap:10px;}
+.param-label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);}
+.param-desc{font-size:12px;color:var(--txt3);margin-top:-4px;}
+
+.tag-grid{display:flex;flex-wrap:wrap;gap:6px;}
+.tag{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700;
+  border:2px solid var(--border2);color:var(--txt2);cursor:pointer;
+  background:transparent;transition:all .12s;user-select:none;
+}
+.tag.selected-tp {border-color:var(--green);color:var(--green);background:var(--green-dim);}
+.tag.selected-sl {border-color:var(--red);color:var(--red);background:var(--red-dim);}
+.tag:hover{border-color:var(--gold);}
+
+.select-all-btn{font-size:11.5px;font-weight:700;color:var(--blue);cursor:pointer;background:none;border:none;padding:2px 0;}
+
+.divider-v{width:1px;background:var(--border);align-self:stretch;flex-shrink:0;}
+
+.run-btn{
+  padding:14px 28px;border-radius:var(--r);background:var(--gold);color:#fff;
+  font-size:15px;font-weight:800;white-space:nowrap;flex-shrink:0;
+  transition:opacity .15s,transform .15s;box-shadow:0 4px 14px var(--gold-glow);
+  display:flex;align-items:center;gap:8px;align-self:flex-end;
+}
+.run-btn:hover{opacity:.88;transform:translateY(-1px);}
+.run-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+
+/* Rules bar */
+.rules-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);}
+
+/* ── Progress ─── */
+.progress-wrap{margin-bottom:24px;display:none;}
+.progress-wrap.visible{display:block;}
+.progress-label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--txt3);margin-bottom:6px;}
+.progress-bar{height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;}
+.progress-fill{height:100%;background:linear-gradient(90deg,#f59e0b,#d97706);border-radius:99px;transition:width .4s ease;width:0%;}
+.progress-status{font-size:12px;color:var(--txt3);margin-top:6px;}
+
+/* ── Summary row ─── */
+.summary-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px;}
+.sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;flex:1;min-width:140px;}
+.sum-label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);margin-bottom:6px;}
+.sum-val{font-size:22px;font-weight:800;font-family:var(--mono);letter-spacing:-0.03em;}
+.sum-sub{font-size:11.5px;color:var(--txt3);margin-top:3px;}
+
+/* ── Section title ─── */
+.section-title{font-size:15px;font-weight:800;letter-spacing:-0.02em;margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.section-title small{font-size:12px;font-weight:500;color:var(--txt3);}
+
+/* ── Heatmap ─── */
+.heatmap-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:20px;margin-bottom:28px;overflow-x:auto;}
+.heatmap-table{border-collapse:separate;border-spacing:4px;font-size:12px;}
+.hm-header-cell{padding:6px 10px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);text-align:center;}
+.hm-row-label{padding:6px 12px;font-size:12px;font-weight:700;color:var(--txt2);text-align:right;white-space:nowrap;}
+.hm-cell{
+  width:72px;height:52px;border-radius:8px;text-align:center;
+  cursor:default;transition:transform .1s;position:relative;
+}
+.hm-cell:hover{transform:scale(1.06);z-index:2;}
+.hm-cell .hm-val{font-size:13px;font-weight:800;font-family:var(--mono);line-height:1;}
+.hm-cell .hm-sub{font-size:10px;font-weight:600;opacity:.75;margin-top:2px;}
+.hm-cell.best{outline:3px solid var(--gold);outline-offset:1px;}
+
+/* ── Results table ─── */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--rl);margin-bottom:28px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead{background:var(--bg2);position:sticky;top:0;z-index:5;}
+th{padding:11px 14px;text-align:left;font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:var(--txt);}
+th.sorted{color:var(--gold);}
+td{padding:10px 14px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--bg2);}
+tr.best-row td{background:rgba(251,191,36,.07);}
+tr.best-row td:first-child{border-left:3px solid var(--gold);}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;font-family:var(--mono);}
+.badge.pos{background:var(--green-dim);color:var(--green);}
+.badge.neg{background:var(--red-dim);color:var(--red);}
+.badge.gold{background:var(--gold-dim);color:var(--gold);}
+
+.rank-num{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--bg3);font-size:11px;font-weight:800;font-family:var(--mono);color:var(--txt3);}
+.rank-num.top3{background:var(--gold-dim);color:var(--gold);}
+
+/* ── Top combos cards ─── */
+.top-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:28px;}
+.top-card{background:var(--bg2);border:1.5px solid var(--border);border-radius:var(--rl);padding:18px 20px;position:relative;}
+.top-card.rank1{border-color:var(--gold);background:rgba(251,191,36,.04);}
+.top-card.rank2{border-color:var(--txt3);}
+.top-card.rank3{border-color:var(--orange);}
+.top-rank{position:absolute;top:12px;right:14px;font-size:18px;}
+.top-combo{font-size:13px;font-weight:800;font-family:var(--mono);color:var(--gold);margin-bottom:10px;}
+.top-stat{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;}
+.top-stat-label{color:var(--txt3);}
+.top-stat-val{font-weight:700;font-family:var(--mono);}
+
+/* Spinner */
+.spinner{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .7s linear infinite;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="/" class="logo"><div class="logo-mark">✦</div><span>GoldenSnitch</span></a>
+  <a href="/"              class="nav-link">Scanner</a>
+  <a href="/backtest.html"  class="nav-link">Hold</a>
+  <a href="/backtest2.html" class="nav-link">10% Exit</a>
+  <a href="/backtest3.html" class="nav-link">Custom Exit</a>
+  <a href="/optimize.html"  class="nav-link active">🔬 Optimizer</a>
+  <a href="/rules.html"     class="nav-link">⚙ Rules</a>
+  <div class="hdr-right">
+    <div class="theme-toggle">
+      <button class="theme-btn" data-t="light">Light</button>
+      <button class="theme-btn" data-t="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Config panel -->
+  <div class="config-panel">
+    <div class="config-title">🔬 Parameter Optimizer</div>
+    <div class="config-sub">Select take-profit and stop-loss values to test. Every combination is run against all NSE stocks in a single scan pass — stocks are fetched once, not once per combo. Results show aggregate win rates and returns, no individual stock details.</div>
+
+    <div class="params-row">
+      <!-- TP values -->
+      <div class="param-group">
+        <div class="param-label">Take-Profit % values</div>
+        <div class="param-desc">Exit when price hits +X% from entry</div>
+        <div class="tag-grid" id="tpTags"></div>
+        <button class="select-all-btn" onclick="selectAll('tp')">Select all</button>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- SL values -->
+      <div class="param-group">
+        <div class="param-label">Stop-Loss % values</div>
+        <div class="param-desc">Exit when price drops -X% from entry</div>
+        <div class="tag-grid" id="slTags"></div>
+        <button class="select-all-btn" onclick="selectAll('sl')">Select all</button>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;align-self:flex-end;">
+        <div style="font-size:12px;color:var(--txt3);font-family:var(--mono);" id="comboCount">— combinations</div>
+        <button class="run-btn" id="runBtn" onclick="startOptimizer()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
+          Run Simulation
+        </button>
+      </div>
+    </div>
+
+    <!-- Active rules -->
+    <div class="rules-bar" id="rulesBar"></div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label">
+      <span id="progressLabel">Scanning…</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-status" id="progressStatus"></div>
+  </div>
+
+  <!-- Results (hidden until run) -->
+  <div id="results" style="display:none">
+
+    <!-- Summary row -->
+    <div class="summary-row">
+      <div class="sum-card">
+        <div class="sum-label">Combinations Tested</div>
+        <div class="sum-val" id="sCombos">—</div>
+        <div class="sum-sub">TP × SL pairs</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Stocks Per Combo</div>
+        <div class="sum-val" id="sStocks">—</div>
+        <div class="sum-sub">passed entry rules</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Best Win Rate</div>
+        <div class="sum-val" id="sBestWR" style="color:var(--green)">—</div>
+        <div class="sum-sub" id="sBestWRCombo">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Best Avg Return</div>
+        <div class="sum-val" id="sBestRet" style="color:var(--green)">—</div>
+        <div class="sum-sub" id="sBestRetCombo">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-label">Fastest Exit</div>
+        <div class="sum-val" id="sFastest">—</div>
+        <div class="sum-sub" id="sFastestCombo">avg days (closed)</div>
+      </div>
+    </div>
+
+    <!-- Top 5 combinations -->
+    <div class="section-title">🏆 Top 5 Combinations <small>ranked by avg return</small></div>
+    <div class="top-grid" id="topGrid"></div>
+
+    <!-- Heatmap -->
+    <div class="section-title">🗺 Win Rate Heatmap <small>% of closed trades that hit take-profit (colour = win rate)</small></div>
+    <div class="heatmap-wrap">
+      <table class="heatmap-table" id="heatmapTable"></table>
+    </div>
+
+    <!-- Sort controls -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <div class="section-title" style="margin-bottom:0">📋 Full Results Table</div>
+      <select id="sortSelect" onchange="renderTable()" style="padding:7px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--bg2);font-size:12.5px;font-weight:600;color:var(--txt);cursor:pointer;outline:none;margin-left:auto;">
+        <option value="avgReturn_desc">Avg Return ↓</option>
+        <option value="winRate_desc">Win Rate ↓</option>
+        <option value="hits_desc">Most Hits ↓</option>
+        <option value="trades_desc">Most Trades ↓</option>
+        <option value="avgDays_asc">Fastest Exit ↑</option>
+        <option value="tp_asc">TP % ↑</option>
+        <option value="sl_asc">SL % ↑</option>
+      </select>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th onclick="sortBy('tp_asc')">TP %</th>
+            <th onclick="sortBy('sl_asc')">SL %</th>
+            <th onclick="sortBy('trades_desc')">Trades</th>
+            <th onclick="sortBy('hits_desc')">Hits (TP)</th>
+            <th onclick="sortBy('misses_desc')">Misses (SL)</th>
+            <th>Open</th>
+            <th onclick="sortBy('winRate_desc')">Win Rate</th>
+            <th onclick="sortBy('avgReturn_desc')">Avg Return</th>
+            <th onclick="sortBy('avgDays_asc')">Avg Days</th>
+          </tr>
+        </thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── Theme ─────────────────────────────
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('gc_theme', t);
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+}
+document.querySelectorAll('.theme-btn').forEach(b => b.onclick = () => applyTheme(b.dataset.t));
+applyTheme(localStorage.getItem('gc_theme') || 'light');
+
+// ── Default param sets ─────────────────
+const TP_OPTIONS = [5, 7, 10, 12, 15, 20, 25, 30];
+const SL_OPTIONS = [3, 5, 7, 10, 12, 15, 20];
+
+let selectedTP = new Set([10, 15, 20, 25]);
+let selectedSL = new Set([5, 7, 10]);
+let allCombos  = {};
+let processed  = 0;
+let sortKey    = 'avgReturn_desc';
+
+// ── Tag buttons ───────────────────────
+function buildTags() {
+  document.getElementById('tpTags').innerHTML = TP_OPTIONS.map(v =>
+    `<button class="tag ${selectedTP.has(v)?'selected-tp':''}" data-tp="${v}" onclick="toggleTP(${v})">${v}%</button>`
+  ).join('');
+  document.getElementById('slTags').innerHTML = SL_OPTIONS.map(v =>
+    `<button class="tag ${selectedSL.has(v)?'selected-sl':''}" data-sl="${v}" onclick="toggleSL(${v})">${v}%</button>`
+  ).join('');
+  updateComboCount();
+}
+function toggleTP(v) {
+  selectedTP.has(v) ? selectedTP.delete(v) : selectedTP.add(v);
+  buildTags();
+}
+function toggleSL(v) {
+  selectedSL.has(v) ? selectedSL.delete(v) : selectedSL.add(v);
+  buildTags();
+}
+function selectAll(type) {
+  if (type === 'tp') { TP_OPTIONS.forEach(v => selectedTP.add(v)); }
+  else               { SL_OPTIONS.forEach(v => selectedSL.add(v)); }
+  buildTags();
+}
+function updateComboCount() {
+  const n = selectedTP.size * selectedSL.size;
+  document.getElementById('comboCount').textContent = n + (n===1?' combination':' combinations');
+}
+
+// ── Rules bar ─────────────────────────
+function loadRules() {
+  try { return JSON.parse(localStorage.getItem('gc_rules') || '{}'); } catch(e) { return {}; }
+}
+function renderRulesBar() {
+  const r = loadRules();
+  const chips = [`<span style="font-size:12px;color:var(--txt3);font-weight:600;">Entry rules:</span>`,
+    `<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--gold-dim);color:var(--gold);">✦ Golden Cross</span>`];
+  if (r.requireADX)    chips.push(`<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--blue-dim);color:var(--blue);">ADX > ${r.adxMin||25}</span>`);
+  if (r.requireVolume) chips.push(`<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--green-dim);color:var(--green);">Vol > ${r.volumeMult||1.5}× avg</span>`);
+  if (r.requireTV)     chips.push(`<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--gold-dim);color:var(--gold);">TV > ₹${r.tvMinCr||10} Cr</span>`);
+  if (r.skipPenny)     chips.push(`<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--red-dim);color:var(--red);">Close > ₹${r.minClose||100}</span>`);
+  if (r.requireRS)     chips.push(`<span style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;background:var(--blue-dim);color:var(--blue);">RS > Nifty 3M</span>`);
+  chips.push(`<a href="/rules.html" style="padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border2);color:var(--txt2);text-decoration:none;">⚙ Edit</a>`);
+  document.getElementById('rulesBar').innerHTML = chips.join('');
+}
+
+// ── Helpers ───────────────────────────
+function fmtPct(n) { return n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%'; }
+function chunk(arr, n) { const o=[]; for(let i=0;i<arr.length;i+=n) o.push(arr.slice(i,i+n)); return o; }
+
+function setProgress(pct, label, status) {
+  document.getElementById('progressFill').style.width   = pct + '%';
+  document.getElementById('progressPct').textContent    = pct + '%';
+  document.getElementById('progressLabel').textContent  = label;
+  document.getElementById('progressStatus').textContent = status;
+}
+
+// ── Main runner ───────────────────────
+async function startOptimizer() {
+  const tpArr = [...selectedTP].sort((a,b)=>a-b);
+  const slArr = [...selectedSL].sort((a,b)=>a-b);
+  if (!tpArr.length || !slArr.length) { alert('Select at least one TP and one SL value.'); return; }
+
+  const btn = document.getElementById('runBtn');
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> Running…`;
+  document.getElementById('results').style.display = 'none';
+
+  const pw = document.getElementById('progressWrap');
+  pw.classList.add('visible');
+  setProgress(0, 'Loading stock list…', '');
+
+  allCombos  = {};
+  processed  = 0;
+
+  // Initialise combo accumulators
+  for (const tp of tpArr) for (const sl of slArr) {
+    const key = `tp${tp}_sl${sl}`;
+    allCombos[key] = { tp, sl, trades:0, hits:0, misses:0, open:0, totalPnl:0, totalDays:0, closedCount:0 };
+  }
+
+  let stocks;
+  try {
+    const resp = await fetch('/api/stocks');
+    const j    = await resp.json();
+    if (!j.ok) throw new Error('Could not load stock list');
+    stocks = j.stocks;
+  } catch(e) { alert('Failed to load stock list: ' + e.message); resetBtn(); return; }
+
+  const symbols = stocks.map(s => s.ticker);
+  const batches = chunk(symbols, 50);
+  const rules   = loadRules();
+  let done = 0;
+
+  setProgress(2, `Testing ${tpArr.length * slArr.length} combos across ${symbols.length} stocks…`, '');
+
+  for (let b = 0; b < batches.length; b++) {
+    try {
+      const resp = await fetch('/api/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: batches[b], tpValues: tpArr, slValues: slArr, ...rules })
+      });
+      const j = await resp.json();
+      if (j.ok && j.combos) {
+        processed += j.processed;
+        // Merge into running totals
+        for (const [key, c] of Object.entries(j.combos)) {
+          if (!allCombos[key]) continue;
+          const t = allCombos[key];
+          t.trades      += c.trades;
+          t.hits        += c.hits;
+          t.misses      += c.misses;
+          t.open        += c.open;
+          t.totalPnl    += c.avgReturn * c.trades;
+          t.totalDays   += (c.avgDays || 0) * (c.hits + c.misses);
+          t.closedCount += c.hits + c.misses;
+        }
+        renderResults();
+        document.getElementById('results').style.display = '';
+      }
+    } catch(e) {}
+
+    done += batches[b].length;
+    setProgress(
+      Math.round(done / symbols.length * 100),
+      `Scanning… (batch ${b+1}/${batches.length})`,
+      `${done} / ${symbols.length} symbols · ${processed} valid crosses found`
+    );
+  }
+
+  setProgress(100, 'Simulation complete!', `${processed} stocks × ${tpArr.length * slArr.length} combos`);
+  setTimeout(() => pw.classList.remove('visible'), 3000);
+  renderResults();
+  document.getElementById('results').style.display = '';
+  resetBtn();
+}
+
+function resetBtn() {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = false;
+  btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg> Run Simulation`;
+}
+
+// ── Finalise combos for display ────────
+function getFinalisedCombos() {
+  return Object.values(allCombos).map(t => ({
+    key:       `tp${t.tp}_sl${t.sl}`,
+    tp:        t.tp,
+    sl:        t.sl,
+    trades:    t.trades,
+    hits:      t.hits,
+    misses:    t.misses,
+    open:      t.open,
+    winRate:   (t.hits + t.misses) ? +(t.hits / (t.hits + t.misses) * 100).toFixed(1) : 0,
+    avgReturn: t.trades ? +(t.totalPnl / t.trades).toFixed(2) : 0,
+    avgDays:   t.closedCount ? Math.round(t.totalDays / t.closedCount) : null,
+  }));
+}
+
+// ── Render all ─────────────────────────
+function renderResults() {
+  const combos = getFinalisedCombos();
+  if (!combos.length) return;
+
+  const tpArr = [...new Set(combos.map(c => c.tp))].sort((a,b)=>a-b);
+  const slArr = [...new Set(combos.map(c => c.sl))].sort((a,b)=>a-b);
+
+  // Summary
+  const byReturn = [...combos].sort((a,b) => b.avgReturn - a.avgReturn);
+  const byWR     = [...combos].sort((a,b) => b.winRate   - a.winRate);
+  const byDays   = [...combos].filter(c=>c.avgDays).sort((a,b)=>a.avgDays-b.avgDays);
+
+  document.getElementById('sCombos').textContent      = combos.length;
+  document.getElementById('sStocks').textContent      = processed;
+  document.getElementById('sBestWR').textContent      = byWR[0]?.winRate + '%';
+  document.getElementById('sBestWRCombo').textContent = `TP ${byWR[0]?.tp}% / SL ${byWR[0]?.sl}%`;
+  const bestRet = byReturn[0];
+  document.getElementById('sBestRet').textContent     = fmtPct(bestRet?.avgReturn);
+  document.getElementById('sBestRet').style.color     = (bestRet?.avgReturn||0) >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('sBestRetCombo').textContent= `TP ${bestRet?.tp}% / SL ${bestRet?.sl}%`;
+  document.getElementById('sFastest').textContent     = byDays[0]?.avgDays + 'd';
+  document.getElementById('sFastestCombo').textContent= `TP ${byDays[0]?.tp}% / SL ${byDays[0]?.sl}%`;
+
+  renderTopCards(byReturn.slice(0, 5));
+  renderHeatmap(combos, tpArr, slArr, byReturn[0]);
+  renderTable();
+}
+
+// ── Top 5 cards ───────────────────────
+const medals = ['🥇','🥈','🥉','4th','5th'];
+function renderTopCards(top5) {
+  document.getElementById('topGrid').innerHTML = top5.map((c, i) => `
+    <div class="top-card ${i===0?'rank1':i===1?'rank2':i===2?'rank3':''}">
+      <div class="top-rank">${medals[i]}</div>
+      <div class="top-combo">TP +${c.tp}% / SL −${c.sl}%</div>
+      <div class="top-stat"><span class="top-stat-label">Avg Return</span><span class="top-stat-val" style="color:${c.avgReturn>=0?'var(--green)':'var(--red)'}">${fmtPct(c.avgReturn)}</span></div>
+      <div class="top-stat"><span class="top-stat-label">Win Rate</span><span class="top-stat-val">${c.winRate}%</span></div>
+      <div class="top-stat"><span class="top-stat-label">Trades</span><span class="top-stat-val">${c.trades}</span></div>
+      <div class="top-stat"><span class="top-stat-label">Hits / Misses</span><span class="top-stat-val">${c.hits} / ${c.misses}</span></div>
+      <div class="top-stat"><span class="top-stat-label">Avg Days</span><span class="top-stat-val">${c.avgDays ?? '—'}d</span></div>
+    </div>
+  `).join('');
+}
+
+// ── Heatmap ───────────────────────────
+function winRateColour(wr) {
+  // 0% → red, 50% → neutral, 100% → green
+  if (wr >= 70) return `rgba(0,168,84,${0.15 + (wr-70)/30*0.55})`;
+  if (wr >= 50) return `rgba(0,168,84,${(wr-50)/20*0.15})`;
+  if (wr >= 30) return `rgba(232,68,58,${(50-wr)/20*0.15})`;
+  return `rgba(232,68,58,${0.15 + (30-wr)/30*0.55})`;
+}
+function renderHeatmap(combos, tpArr, slArr, bestCombo) {
+  const map = {};
+  combos.forEach(c => { map[`tp${c.tp}_sl${c.sl}`] = c; });
+
+  let html = '<tr><th class="hm-header-cell"></th>';
+  tpArr.forEach(tp => { html += `<th class="hm-header-cell">TP ${tp}%</th>`; });
+  html += '</tr>';
+
+  slArr.forEach(sl => {
+    html += `<tr><td class="hm-row-label">SL ${sl}%</td>`;
+    tpArr.forEach(tp => {
+      const c   = map[`tp${tp}_sl${sl}`];
+      const wr  = c?.winRate ?? 0;
+      const ret = c?.avgReturn ?? 0;
+      const isBest = bestCombo && c?.tp === bestCombo.tp && c?.sl === bestCombo.sl;
+      const bg  = winRateColour(wr);
+      const textColor = wr >= 50 ? 'var(--green)' : 'var(--red)';
+      html += `<td class="hm-cell ${isBest?'best':''}" style="background:${bg};">
+        <div class="hm-val" style="color:${textColor}">${wr}%</div>
+        <div class="hm-sub" style="color:var(--txt2)">${fmtPct(ret)}</div>
+      </td>`;
+    });
+    html += '</tr>';
+  });
+
+  document.getElementById('heatmapTable').innerHTML = html;
+}
+
+// ── Table ─────────────────────────────
+function sortBy(key) {
+  sortKey = key;
+  document.getElementById('sortSelect').value = key;
+  renderTable();
+}
+
+function renderTable() {
+  sortKey = document.getElementById('sortSelect')?.value || sortKey;
+  const combos = getFinalisedCombos();
+  const byReturn = [...combos].sort((a,b)=>b.avgReturn-a.avgReturn);
+  const bestKey  = byReturn[0]?.key;
+
+  combos.sort((a, b) => {
+    switch(sortKey) {
+      case 'avgReturn_desc': return b.avgReturn - a.avgReturn;
+      case 'winRate_desc':   return b.winRate   - a.winRate;
+      case 'hits_desc':      return b.hits      - a.hits;
+      case 'misses_desc':    return b.misses     - a.misses;
+      case 'trades_desc':    return b.trades     - a.trades;
+      case 'avgDays_asc':    return (a.avgDays??9999) - (b.avgDays??9999);
+      case 'tp_asc':         return a.tp - b.tp || a.sl - b.sl;
+      case 'sl_asc':         return a.sl - b.sl || a.tp - b.tp;
+      default:               return b.avgReturn - a.avgReturn;
+    }
+  });
+
+  const tbody = document.getElementById('tblBody');
+  tbody.innerHTML = combos.map((c, i) => {
+    const isBest = c.key === bestKey && sortKey === 'avgReturn_desc';
+    const retCls = c.avgReturn >= 0 ? 'pos' : 'neg';
+    const rankCls = i < 3 ? 'top3' : '';
+    return `<tr class="${isBest?'best-row':''}">
+      <td><span class="rank-num ${rankCls}">${i+1}</span></td>
+      <td><span style="font-family:var(--mono);font-weight:800;color:var(--green)">+${c.tp}%</span></td>
+      <td><span style="font-family:var(--mono);font-weight:800;color:var(--red)">-${c.sl}%</span></td>
+      <td style="font-family:var(--mono)">${c.trades}</td>
+      <td style="font-family:var(--mono);color:var(--green)">${c.hits}</td>
+      <td style="font-family:var(--mono);color:var(--red)">${c.misses}</td>
+      <td style="font-family:var(--mono);color:var(--orange)">${c.open}</td>
+      <td><span class="badge ${c.winRate>=50?'pos':'neg'}">${c.winRate}%</span></td>
+      <td><span class="badge ${retCls}">${fmtPct(c.avgReturn)}</span></td>
+      <td style="font-family:var(--mono);color:var(--txt2)">${c.avgDays != null ? c.avgDays+'d' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Boot ──────────────────────────────
+buildTags();
+renderRulesBar();
+</script>
+</body>
+</html>
