@@ -200,6 +200,8 @@ tr:hover td{background:var(--bg2);}
   <a href="/" class="nav-link">Scanner</a>
   <a href="/backtest.html"  class="nav-link active">Backtest (Hold)</a>
   <a href="/backtest2.html" class="nav-link">Backtest (10% Exit)</a>
+  <a href="/backtest3.html" class="nav-link">Backtest (Custom)</a>
+  <a href="/rules.html"     class="nav-link">⚙ Rules</a>
   <div class="hdr-right">
     <div class="theme-toggle">
       <button class="theme-btn" data-t="light">Light</button>
@@ -219,6 +221,8 @@ tr:hover td{background:var(--bg2);}
       Run Backtest
     </button>
   </div>
+  <!-- Active rules chips -->
+  <div id="rulesBar" style="display:none;margin-bottom:20px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"></div>
 
   <!-- Progress -->
   <div class="progress-wrap" id="progressWrap">
@@ -329,6 +333,22 @@ const LS_DATE    = 'gc_bt1_date';
 const LS_RESULTS = 'gc_bt1_results';
 const CACHE_TYPE = 'backtest';
 
+// ── Rules ─────────────────────────────────────────────
+function loadRules() {
+  try { return JSON.parse(localStorage.getItem('gc_rules') || '{}'); } catch(e) { return {}; }
+}
+function renderRulesBar() {
+  const r   = loadRules();
+  const el  = document.getElementById('rulesBar');
+  const chips = [`<span style="font-size:12px;color:var(--txt3);font-weight:600;">Entry filters:</span>`,
+    `<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--gold-dim);color:var(--gold);">✦ Golden Cross</span>`];
+  if (r.requireADX)    chips.push(`<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--blue-dim);color:var(--blue);">ADX > ${r.adxMin||25}</span>`);
+  if (r.requireVolume) chips.push(`<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--green-dim);color:var(--green);">Vol > ${r.volumeMult||1.5}× avg</span>`);
+  chips.push(`<a href="/rules.html" style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border2);color:var(--txt2);text-decoration:none;">⚙ Edit rules</a>`);
+  el.innerHTML = chips.join('');
+  el.style.display = 'flex';
+}
+
 // ── Theme ─────────────────────────────────────────────
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
@@ -419,6 +439,7 @@ function showResults(results) {
 
 // ── Boot: try cache first ─────────────────────────────
 (async function boot() {
+  renderRulesBar();
   // 1. localStorage (instant)
   const local = loadFromLocalCache();
   if (local && local.length) {
@@ -482,7 +503,7 @@ async function startBacktest() {
       const resp = await fetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: batches[b] })
+        body: JSON.stringify({ symbols: batches[b], ...loadRules() })
       });
       const j = await resp.json();
       if (j.ok && j.results) {

@@ -6,6 +6,7 @@
     { "source": "/api/stocks",   "destination": "/api/stocks.js"   },
     { "source": "/api/cache",    "destination": "/api/cache.js"    },
     { "source": "/api/backtest",  "destination": "/api/backtest.js"  },
-    { "source": "/api/backtest2", "destination": "/api/backtest2.js" }
+    { "source": "/api/backtest2", "destination": "/api/backtest2.js" },
+    { "source": "/api/backtest3", "destination": "/api/backtest3.js" }
   ]
 }

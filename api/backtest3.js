@@ -1,5 +1,5 @@
-// api/backtest2.js — Golden cross backtest with 10% TP / 10% SL exit
-// POST body: { symbols, requireADX, adxMin, requireVolume, volumeMult }
+// api/backtest3.js — Golden cross backtest with configurable TP/SL exit
+// POST body: { symbols, tp, sl, requireADX, adxMin, requireVolume, volumeMult }
 
 const https = require('https');
 const { sma, adx, avgVolume } = require('./_indicators');
@@ -57,7 +57,7 @@ async function fetchOHLC(sym) {
   };
 }
 
-async function backtestSymbol(sym, rules) {
+async function backtestSymbol(sym, tpPct, slPct, rules) {
   const data = await fetchOHLC(sym);
   if (!data) return null;
   const { rows, name, ltp } = data;
@@ -71,13 +71,13 @@ async function backtestSymbol(sym, rules) {
   const crossIdx = findLastGoldenCross(closes);
   if (crossIdx < 0) return null;
 
-  // ── Rule: ADX at cross ──
+  // ── Rule: ADX ──
   if (rules.requireADX) {
     const adxArr = adx(highs, lows, closes, 14);
     if ((adxArr[crossIdx] ?? 0) < rules.adxMin) return null;
   }
 
-  // ── Rule: Volume at cross ──
+  // ── Rule: Volume ──
   if (rules.requireVolume) {
     const avgVol = avgVolume(volumes, 20);
     if (!avgVol[crossIdx] || volumes[crossIdx] < rules.volumeMult * avgVol[crossIdx]) return null;
@@ -85,17 +85,17 @@ async function backtestSymbol(sym, rules) {
 
   const entryPrice = closes[crossIdx];
   const entryDate  = dates[crossIdx];
-  const tp = entryPrice * 1.10;
-  const sl = entryPrice * 0.90;
+  const tpPrice    = entryPrice * (1 + tpPct/100);
+  const slPrice    = entryPrice * (1 - slPct/100);
 
   let exitDate = null, exitPrice = null, exitType = 'open', daysToExit = null;
   for (let i = crossIdx + 1; i < rows.length; i++) {
-    if (highs[i] >= tp) { exitDate=dates[i]; exitPrice=tp; exitType='tp'; daysToExit=i-crossIdx; break; }
-    if (lows[i]  <= sl) { exitDate=dates[i]; exitPrice=sl; exitType='sl'; daysToExit=i-crossIdx; break; }
+    if (highs[i] >= tpPrice) { exitDate=dates[i]; exitPrice=tpPrice; exitType='tp'; daysToExit=i-crossIdx; break; }
+    if (lows[i]  <= slPrice) { exitDate=dates[i]; exitPrice=slPrice; exitType='sl'; daysToExit=i-crossIdx; break; }
   }
 
   const currentPrice = ltp || closes[closes.length-1];
-  const pnlPct = exitType==='tp' ? 10 : exitType==='sl' ? -10
+  const pnlPct = exitType==='tp' ? tpPct : exitType==='sl' ? -slPct
     : +((currentPrice-entryPrice)/entryPrice*100).toFixed(2);
 
   return {
@@ -116,6 +116,8 @@ module.exports = async (req, res) => {
 
   const body    = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   const symbols = (body?.symbols || []).slice(0, 150);
+  const tp      = Math.min(Math.max(parseFloat(body?.tp) || 10, 1), 200);
+  const sl      = Math.min(Math.max(parseFloat(body?.sl) || 10, 1), 100);
   const rules = {
     requireADX:    !!body?.requireADX,
     adxMin:        parseFloat(body?.adxMin)     || 25,
@@ -127,7 +129,7 @@ module.exports = async (req, res) => {
   for (let i = 0; i < symbols.length; i += 8) {
     const batch   = symbols.slice(i, i+8);
     const settled = await Promise.all(batch.map(async sym => {
-      try { return await backtestSymbol(sym, rules); } catch { return null; }
+      try { return await backtestSymbol(sym, tp, sl, rules); } catch { return null; }
     }));
     for (const r of settled) if (r) results.push(r);
   }
@@ -140,7 +142,7 @@ module.exports = async (req, res) => {
     ? +(results.filter(r=>r.daysToExit).reduce((s,r)=>s+r.daysToExit,0)/closed).toFixed(1) : null;
 
   return res.status(200).json({
-    ok: true, results,
+    ok: true, tp, sl, results,
     summary: {
       total: results.length, hits: hits.length, misses: misses.length, open: open.length,
       hitRate: closed ? +(hits.length/closed*100).toFixed(1) : 0,
