@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>GoldenSnitch — Intraday Rules</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script>(function(){var t=localStorage.getItem('gc_theme')||'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#ffffff;--bg2:#f7f8fa;--bg3:#eef0f4;--bg4:#e0e4ea;
+  --txt:#0b0d12;--txt2:#5b6472;--txt3:#98a0ad;
+  --border:#e6e8ec;--border2:#d4d8de;
+  --gold:#d97706;--gold-dim:rgba(217,119,6,.12);--gold-glow:rgba(251,191,36,.3);
+  --green:#00a854;--green-dim:rgba(0,168,84,.10);
+  --red:#e8443a;--red-dim:rgba(232,68,58,.10);
+  --blue:#3578f6;--blue-dim:rgba(53,120,246,.10);
+  --orange:#f97316;--orange-dim:rgba(249,115,22,.12);
+  --purple:#8b5cf6;--purple-dim:rgba(139,92,246,.12);
+  --r:10px;--rl:16px;
+  --font:'Inter',-apple-system,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+[data-theme="dark"]{
+  --bg:#07090c;--bg2:#11151c;--bg3:#181d26;--bg4:#1f242e;
+  --txt:#f5f7fa;--txt2:#99a2b1;--txt3:#5a6473;
+  --border:#1f242e;--border2:#2a313d;
+  --gold:#fbbf24;--gold-dim:rgba(251,191,36,.14);--gold-glow:rgba(251,191,36,.25);
+  --green:#34d399;--green-dim:rgba(52,211,153,.12);
+  --red:#ff6961;--red-dim:rgba(255,105,97,.16);
+}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--font);
+  -webkit-font-smoothing:antialiased;letter-spacing:-0.01em;font-size:14px;transition:background .2s,color .2s;}
+button{font-family:var(--font);cursor:pointer;border:0;background:transparent;color:inherit;}
+
+/* ── Header ─── */
+.hdr{display:flex;align-items:center;gap:10px;padding:12px 24px;border-bottom:1px solid var(--border);
+  background:var(--bg);position:sticky;top:0;z-index:50;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:800;letter-spacing:-0.03em;text-decoration:none;color:var(--txt);flex-shrink:0;}
+.logo-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#f59e0b,#d97706);display:grid;place-items:center;font-size:17px;box-shadow:0 3px 12px var(--gold-glow);}
+.logo span{background:linear-gradient(135deg,#f59e0b,#d97706);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.nav-link{padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--txt2);text-decoration:none;white-space:nowrap;transition:all .12s;}
+.nav-link:hover{color:var(--txt);background:var(--bg2);}
+.nav-link.active{color:var(--green);background:var(--green-dim);}
+.hdr-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;}
+.theme-toggle{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);}
+.theme-btn{padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600;color:var(--txt3);background:transparent;appearance:none;border:none;cursor:pointer;transition:all .12s;}
+.theme-btn.active{background:var(--bg);color:var(--txt);box-shadow:0 1px 3px rgba(11,13,18,.08);}
+[data-theme="dark"] .theme-btn.active{background:var(--bg4);}
+
+/* ── Main ─── */
+.main{padding:36px 24px 80px;max-width:820px;margin:0 auto;}
+.page-header{margin-bottom:32px;}
+.page-header h1{font-size:22px;font-weight:800;letter-spacing:-0.03em;margin-bottom:6px;}
+.page-sub{font-size:13.5px;color:var(--txt2);line-height:1.6;}
+
+/* ── Active rules summary ─── */
+.summary-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px 18px;margin-bottom:28px;
+  font-size:12.5px;color:var(--txt2);
+}
+.summary-bar strong{color:var(--txt);font-weight:700;}
+.rule-pill{
+  padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;
+  background:var(--green-dim);color:var(--green);
+}
+.rule-pill.off{background:var(--bg3);color:var(--txt3);}
+
+/* ── Rule card ─── */
+.rule-card{
+  background:var(--bg2);border:1.5px solid var(--border);
+  border-radius:var(--rl);padding:22px 24px;margin-bottom:14px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.rule-card.enabled{border-color:var(--green);box-shadow:0 0 0 1px var(--green-dim);}
+.rule-card.always-on{border-color:var(--gold);}
+
+.rule-header{display:flex;align-items:flex-start;gap:14px;}
+.rule-icon{
+  width:42px;height:42px;border-radius:11px;flex-shrink:0;
+  display:grid;place-items:center;font-size:18px;
+}
+.rule-icon.gold  {background:var(--gold-dim);}
+.rule-icon.green {background:var(--green-dim);}
+.rule-icon.blue  {background:var(--blue-dim);}
+.rule-icon.orange{background:var(--orange-dim);}
+.rule-icon.purple{background:var(--purple-dim);}
+.rule-icon.red   {background:var(--red-dim);}
+
+.rule-meta{flex:1;min-width:0;}
+.rule-name{font-size:14.5px;font-weight:800;letter-spacing:-0.02em;}
+.rule-desc{font-size:12.5px;color:var(--txt2);margin-top:4px;line-height:1.55;}
+.rule-current{
+  margin-top:6px;display:inline-flex;align-items:center;gap:6px;
+  padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;
+  background:var(--bg3);color:var(--txt3);font-family:var(--mono);
+}
+.rule-current.on{background:var(--green-dim);color:var(--green);}
+
+/* Toggle */
+.toggle-wrap{flex-shrink:0;margin-top:2px;}
+.toggle{
+  position:relative;width:46px;height:26px;
+  background:var(--bg3);border-radius:99px;cursor:pointer;
+  transition:background .2s;border:none;display:block;
+}
+.toggle.on{background:var(--green);}
+.toggle.always{background:var(--gold);cursor:default;}
+.toggle::after{
+  content:'';position:absolute;top:3px;left:3px;
+  width:20px;height:20px;border-radius:50%;
+  background:#fff;transition:transform .2s;
+  box-shadow:0 1px 3px rgba(0,0,0,.15);
+}
+.toggle.on::after,.toggle.always::after{transform:translateX(20px);}
+
+/* Config section */
+.rule-config{
+  margin-top:18px;padding-top:18px;border-top:1px solid var(--border);
+  display:none;
+}
+.rule-config.visible{display:block;}
+
+.config-label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);margin-bottom:10px;}
+.slider-row{display:flex;align-items:center;gap:14px;}
+.two-slider-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+
+.slider{
+  flex:1;height:4px;accent-color:var(--green);cursor:pointer;
+  appearance:none;-webkit-appearance:none;
+  background:linear-gradient(to right, var(--green) 0%, var(--green) 50%, var(--bg3) 50%);
+  border-radius:99px;
+}
+.slider-val{
+  font-size:17px;font-weight:800;font-family:var(--mono);
+  min-width:56px;text-align:right;color:var(--green);
+}
+.slider-hint{font-size:12px;color:var(--txt3);margin-top:6px;}
+
+.opt-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.opt-btn{
+  padding:5px 14px;border-radius:999px;font-size:12.5px;font-weight:700;
+  border:1.5px solid var(--border2);color:var(--txt2);background:transparent;
+  cursor:pointer;transition:all .12s;
+}
+.opt-btn.active{border-color:var(--green);color:var(--green);background:var(--green-dim);}
+
+/* Info box */
+.info-box{
+  padding:12px 16px;border-radius:var(--r);background:var(--blue-dim);
+  font-size:13px;color:var(--blue);font-weight:600;line-height:1.55;
+}
+
+/* Save row */
+.save-row{display:flex;align-items:center;gap:12px;margin-top:28px;}
+.save-btn{
+  padding:11px 26px;border-radius:var(--r);background:var(--green);color:#fff;
+  font-size:13.5px;font-weight:800;cursor:pointer;border:none;
+  box-shadow:0 4px 14px rgba(0,168,84,.3);
+  transition:opacity .15s,transform .15s;
+}
+.save-btn:hover{opacity:.88;transform:translateY(-1px);}
+.reset-btn{
+  padding:11px 20px;border-radius:var(--r);border:1.5px solid var(--border2);
+  font-size:13px;font-weight:700;color:var(--txt2);background:transparent;
+  cursor:pointer;transition:all .12s;
+}
+.reset-btn:hover{border-color:var(--red);color:var(--red);}
+.save-confirm{font-size:13px;color:var(--green);font-weight:600;display:none;}
+
+/* Back link */
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;margin-top:28px;
+  padding:10px 18px;border-radius:var(--r);border:1.5px solid var(--border2);
+  font-size:13px;font-weight:700;color:var(--txt2);text-decoration:none;
+  background:transparent;transition:all .12s;
+}
+.back-link:hover{border-color:var(--green);color:var(--green);}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="/" class="logo"><div class="logo-mark">✦</div><span>GoldenSnitch</span></a>
+  <a href="/"                     class="nav-link">Scanner</a>
+  <a href="/intraday.html"        class="nav-link">⚡ Intraday</a>
+  <a href="/intraday-rules.html"  class="nav-link active">⚙ Intraday Rules</a>
+  <a href="/backtest.html"        class="nav-link">Backtest</a>
+  <a href="/optimize.html"        class="nav-link">Optimizer</a>
+  <a href="/rules.html"           class="nav-link">⚙ Rules</a>
+  <div class="hdr-right">
+    <div class="theme-toggle">
+      <button class="theme-btn" data-t="light">Light</button>
+      <button class="theme-btn" data-t="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <div class="page-header">
+    <h1>⚡ Intraday Scan Rules</h1>
+    <p class="page-sub">Toggle which conditions must be satisfied for a BUY signal. Saved locally and applied immediately on the Intraday Scanner page — no need to re-scan.</p>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-bar" id="summaryBar">
+    <strong>Active rules:</strong>
+    <span id="summaryPills"></span>
+  </div>
+
+  <!-- Rule: Price > VWAP -->
+  <div class="rule-card" id="vwapCard">
+    <div class="rule-header">
+      <div class="rule-icon blue">📍</div>
+      <div class="rule-meta">
+        <div class="rule-name">Price Above VWAP</div>
+        <div class="rule-desc">Current price (LTP) must be above the session VWAP. VWAP acts as the institutional fair-value anchor — stocks trading above it have bullish intraday bias.</div>
+        <div class="rule-current" id="vwapCurrent">LTP &gt; VWAP</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="vwapToggle" onclick="toggleRule('vwap')"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule: EMA Crossover -->
+  <div class="rule-card" id="emaCard">
+    <div class="rule-header">
+      <div class="rule-icon gold">〰</div>
+      <div class="rule-meta">
+        <div class="rule-name">EMA 9 &gt; EMA 21</div>
+        <div class="rule-desc">9-period EMA must be above 21-period EMA on the 5-minute chart. This short-term crossover confirms bullish momentum on the intraday timeframe.</div>
+        <div class="rule-current" id="emaCurrent">EMA9 &gt; EMA21</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="emaToggle" onclick="toggleRule('ema')"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule: ADX -->
+  <div class="rule-card" id="adxCard">
+    <div class="rule-header">
+      <div class="rule-icon orange">📈</div>
+      <div class="rule-meta">
+        <div class="rule-name">ADX — Trend Strength</div>
+        <div class="rule-desc">ADX (14-period, 5-min chart) must exceed a threshold. Filters out sideways or choppy price action where breakouts tend to fail.</div>
+        <div class="rule-current" id="adxCurrent">ADX &gt; 25</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="adxToggle" onclick="toggleRule('adx')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="adxConfig">
+      <div class="config-label">Minimum ADX</div>
+      <div class="slider-row">
+        <input class="slider" id="adxSlider" type="range" min="15" max="50" step="1" value="25"
+          oninput="onAdxSlider(this.value)">
+        <div class="slider-val" id="adxVal">25</div>
+      </div>
+      <div class="opt-row">
+        <button class="opt-btn" onclick="setAdx(20)">20 — trending</button>
+        <button class="opt-btn active" onclick="setAdx(25)">25 — strong</button>
+        <button class="opt-btn" onclick="setAdx(30)">30 — very strong</button>
+        <button class="opt-btn" onclick="setAdx(40)">40 — extreme</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule: RSI -->
+  <div class="rule-card" id="rsiCard">
+    <div class="rule-header">
+      <div class="rule-icon purple">〽</div>
+      <div class="rule-meta">
+        <div class="rule-name">RSI Range</div>
+        <div class="rule-desc">RSI (14-period, 5-min chart) must be within a range. This catches stocks with momentum (above 50) but not overbought (below 75). Adjust to be more or less selective.</div>
+        <div class="rule-current" id="rsiCurrent">55 ≤ RSI ≤ 70</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="rsiToggle" onclick="toggleRule('rsi')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="rsiConfig">
+      <div class="two-slider-row">
+        <div>
+          <div class="config-label">RSI Minimum</div>
+          <div class="slider-row">
+            <input class="slider" id="rsiMinSlider" type="range" min="40" max="70" step="1" value="55"
+              oninput="onRsiMinSlider(this.value)">
+            <div class="slider-val" id="rsiMinVal">55</div>
+          </div>
+          <div class="opt-row">
+            <button class="opt-btn" onclick="setRsiMin(50)">50</button>
+            <button class="opt-btn active" onclick="setRsiMin(55)">55</button>
+            <button class="opt-btn" onclick="setRsiMin(60)">60</button>
+          </div>
+        </div>
+        <div>
+          <div class="config-label">RSI Maximum</div>
+          <div class="slider-row">
+            <input class="slider" id="rsiMaxSlider" type="range" min="60" max="85" step="1" value="70"
+              oninput="onRsiMaxSlider(this.value)">
+            <div class="slider-val" id="rsiMaxVal">70</div>
+          </div>
+          <div class="opt-row">
+            <button class="opt-btn" onclick="setRsiMax(65)">65</button>
+            <button class="opt-btn active" onclick="setRsiMax(70)">70</button>
+            <button class="opt-btn" onclick="setRsiMax(75)">75</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule: Volume Surge -->
+  <div class="rule-card" id="volCard">
+    <div class="rule-header">
+      <div class="rule-icon green">📊</div>
+      <div class="rule-meta">
+        <div class="rule-name">Volume Surge</div>
+        <div class="rule-desc">Current 5-min candle volume must be above N× the average of the last 20 candles. Confirms the move is backed by real participation, not a thin market move.</div>
+        <div class="rule-current" id="volCurrent">Vol &gt; 2.0× avg</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="volToggle" onclick="toggleRule('vol')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="volConfig">
+      <div class="config-label">Minimum volume multiplier vs 20-candle avg</div>
+      <div class="slider-row">
+        <input class="slider" id="volSlider" type="range" min="1.0" max="5.0" step="0.5" value="2.0"
+          oninput="onVolSlider(this.value)">
+        <div class="slider-val" id="volVal">2.0×</div>
+      </div>
+      <div class="opt-row">
+        <button class="opt-btn" onclick="setVol(1.5)">1.5× — moderate</button>
+        <button class="opt-btn active" onclick="setVol(2.0)">2.0× — strong</button>
+        <button class="opt-btn" onclick="setVol(3.0)">3.0× — very strong</button>
+        <button class="opt-btn" onclick="setVol(4.0)">4.0× — extreme</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule: Time Window -->
+  <div class="rule-card" id="timeCard">
+    <div class="rule-header">
+      <div class="rule-icon blue">🕐</div>
+      <div class="rule-meta">
+        <div class="rule-name">Trading Time Window</div>
+        <div class="rule-desc">Only generate BUY signals within the defined IST time window. Avoids the volatile opening and the illiquid close — default is 9:30 AM to 2:45 PM.</div>
+        <div class="rule-current" id="timeCurrent">9:30 – 14:45 IST</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="timeToggle" onclick="toggleRule('time')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="timeConfig">
+      <div class="two-slider-row">
+        <div>
+          <div class="config-label">Start time (IST)</div>
+          <div class="slider-row">
+            <input class="slider" id="timeStartSlider" type="range" min="570" max="630" step="5" value="570"
+              oninput="onTimeStartSlider(this.value)">
+            <div class="slider-val" id="timeStartVal" style="font-size:14px">9:30</div>
+          </div>
+          <div class="opt-row">
+            <button class="opt-btn active" onclick="setTimeStart(570)">9:30</button>
+            <button class="opt-btn" onclick="setTimeStart(585)">9:45</button>
+            <button class="opt-btn" onclick="setTimeStart(600)">10:00</button>
+          </div>
+        </div>
+        <div>
+          <div class="config-label">End time (IST)</div>
+          <div class="slider-row">
+            <input class="slider" id="timeEndSlider" type="range" min="780" max="930" step="5" value="885"
+              oninput="onTimeEndSlider(this.value)">
+            <div class="slider-val" id="timeEndVal" style="font-size:14px">14:45</div>
+          </div>
+          <div class="opt-row">
+            <button class="opt-btn" onclick="setTimeEnd(840)">14:00</button>
+            <button class="opt-btn active" onclick="setTimeEnd(885)">14:45</button>
+            <button class="opt-btn" onclick="setTimeEnd(900)">15:00</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule: Gap Filter -->
+  <div class="rule-card" id="gapCard">
+    <div class="rule-header">
+      <div class="rule-icon red">↕</div>
+      <div class="rule-meta">
+        <div class="rule-name">Gap Filter</div>
+        <div class="rule-desc">Excludes stocks that gapped up too aggressively or gapped down at the open vs previous close. Avoids chasing or fading extreme opens.</div>
+        <div class="rule-current" id="gapCurrent">−2% ≤ Gap ≤ +3%</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="gapToggle" onclick="toggleRule('gap')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="gapConfig">
+      <div class="two-slider-row">
+        <div>
+          <div class="config-label">Max gap down (%)</div>
+          <div class="slider-row">
+            <input class="slider" id="gapDownSlider" type="range" min="-8" max="0" step="0.5" value="-2"
+              oninput="onGapDownSlider(this.value)">
+            <div class="slider-val" id="gapDownVal" style="font-size:15px">−2%</div>
+          </div>
+          <div class="opt-row">
+            <button class="opt-btn" onclick="setGapDown(-5)">−5%</button>
+            <button class="opt-btn" onclick="setGapDown(-3)">−3%</button>
+            <button class="opt-btn active" onclick="setGapDown(-2)">−2%</button>
+            <button class="opt-btn" onclick="setGapDown(-1)">−1%</button>
+          </div>
+        </div>
+        <div>
+          <div class="config-label">Max gap up (%)</div>
+          <div class="slider-row">
+            <input class="slider" id="gapUpSlider" type="range" min="0" max="8" step="0.5" value="3"
+              oninput="onGapUpSlider(this.value)">
+            <div class="slider-val" id="gapUpVal" style="font-size:15px">+3%</div>
+          </div>
+          <div class="opt-row">
+            <button class="opt-btn" onclick="setGapUp(2)">+2%</button>
+            <button class="opt-btn active" onclick="setGapUp(3)">+3%</button>
+            <button class="opt-btn" onclick="setGapUp(5)">+5%</button>
+            <button class="opt-btn" onclick="setGapUp(8)">+8%</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save -->
+  <div class="save-row">
+    <button class="save-btn" onclick="saveRules()">✓ Save Rules</button>
+    <button class="reset-btn" onclick="resetDefaults()">Reset to defaults</button>
+    <span class="save-confirm" id="saveConfirm">✓ Saved — Intraday Scanner will apply these rules</span>
+  </div>
+
+  <a href="/intraday.html" class="back-link">← Back to Intraday Scanner</a>
+
+</main>
+
+<script>
+// ── Theme ────────────────────────────
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('gc_theme', t);
+  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+}
+document.querySelectorAll('.theme-btn').forEach(b => b.onclick = () => applyTheme(b.dataset.t));
+applyTheme(localStorage.getItem('gc_theme') || 'light');
+
+// ── Defaults ────────────────────────
+const DEFAULTS = {
+  requireVWAP:  true,
+  requireEMA:   true,
+  requireADX:   true,  adxMin:     25,
+  requireRSI:   true,  rsiMin:     55,  rsiMax: 70,
+  requireVol:   true,  volMult:    2.0,
+  requireTime:  true,  timeStart:  570, timeEnd: 885,  // 9:30, 14:45
+  requireGap:   true,  gapDown:   -2,   gapUp:   3,
+};
+
+let rules = { ...DEFAULTS };
+
+// ── Load ─────────────────────────────
+function loadRules() {
+  try {
+    const saved = localStorage.getItem('gc_intraday_rules');
+    if (saved) rules = { ...DEFAULTS, ...JSON.parse(saved) };
+  } catch(e) {}
+}
+
+// ── Map key → display name ────────────
+const NAMES = {
+  vwap: 'VWAP', ema: 'EMA', adx: 'ADX', rsi: 'RSI',
+  vol: 'Volume', time: 'Time', gap: 'Gap',
+};
+const KEYS = ['vwap','ema','adx','rsi','vol','time','gap'];
+const ON_KEY = { vwap:'requireVWAP', ema:'requireEMA', adx:'requireADX', rsi:'requireRSI', vol:'requireVol', time:'requireTime', gap:'requireGap' };
+
+// ── Apply to UI ──────────────────────
+function applyToUI() {
+  KEYS.forEach(k => setToggle(k, rules[ON_KEY[k]]));
+
+  // Sliders
+  setAdxUI(rules.adxMin);
+  setRsiMinUI(rules.rsiMin);
+  setRsiMaxUI(rules.rsiMax);
+  setVolUI(rules.volMult);
+  setTimeStartUI(rules.timeStart);
+  setTimeEndUI(rules.timeEnd);
+  setGapDownUI(rules.gapDown);
+  setGapUpUI(rules.gapUp);
+
+  updateSummary();
+}
+
+function setToggle(key, on) {
+  const btn  = document.getElementById(key + 'Toggle');
+  const conf = document.getElementById(key + 'Config');
+  const card = document.getElementById(key + 'Card');
+  btn.classList.toggle('on', on);
+  if (conf) conf.classList.toggle('visible', on);
+  card.classList.toggle('enabled', on);
+  updateCurrentBadge(key);
+}
+
+function toggleRule(key) {
+  rules[ON_KEY[key]] = !rules[ON_KEY[key]];
+  setToggle(key, rules[ON_KEY[key]]);
+  updateSummary();
+}
+
+// ── Summary pills ────────────────────
+function updateSummary() {
+  const pills = KEYS.map(k => {
+    const on = rules[ON_KEY[k]];
+    return `<span class="rule-pill ${on?'':'off'}">${NAMES[k]}</span>`;
+  }).join('');
+  const count = KEYS.filter(k => rules[ON_KEY[k]]).length;
+  document.getElementById('summaryPills').innerHTML = pills;
+}
+
+// ── "Current" badge text ─────────────
+function updateCurrentBadge(key) {
+  const on = rules[ON_KEY[key]];
+  const el = document.getElementById(key + 'Current');
+  if (!el) return;
+  el.className = 'rule-current' + (on ? ' on' : '');
+  const texts = {
+    vwap: 'LTP > VWAP',
+    ema:  'EMA9 > EMA21',
+    adx:  `ADX > ${rules.adxMin}`,
+    rsi:  `${rules.rsiMin} ≤ RSI ≤ ${rules.rsiMax}`,
+    vol:  `Vol > ${rules.volMult.toFixed(1)}× avg`,
+    time: `${minsToTime(rules.timeStart)} – ${minsToTime(rules.timeEnd)} IST`,
+    gap:  `${rules.gapDown}% ≤ Gap ≤ +${rules.gapUp}%`,
+  };
+  el.textContent = texts[key] || '';
+}
+
+function minsToTime(m) {
+  const h = Math.floor(m/60), mm = m % 60;
+  return `${h}:${String(mm).padStart(2,'0')}`;
+}
+
+// ── ADX ──────────────────────────────
+function setAdxUI(v) {
+  document.getElementById('adxSlider').value = v;
+  document.getElementById('adxVal').textContent = v;
+  updateSliderBg('adxSlider', v, 15, 50);
+  document.querySelectorAll('#adxConfig .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.textContent) === parseInt(v)));
+}
+function onAdxSlider(v) { rules.adxMin = parseInt(v); setAdxUI(v); updateCurrentBadge('adx'); }
+function setAdx(v)       { rules.adxMin = v; setAdxUI(v); updateCurrentBadge('adx'); }
+
+// ── RSI ──────────────────────────────
+function setRsiMinUI(v) {
+  document.getElementById('rsiMinSlider').value = v;
+  document.getElementById('rsiMinVal').textContent = v;
+  updateSliderBg('rsiMinSlider', v, 40, 70);
+  document.querySelectorAll('#rsiConfig div:first-child .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.textContent) === parseInt(v)));
+}
+function setRsiMaxUI(v) {
+  document.getElementById('rsiMaxSlider').value = v;
+  document.getElementById('rsiMaxVal').textContent = v;
+  updateSliderBg('rsiMaxSlider', v, 60, 85);
+  document.querySelectorAll('#rsiConfig div:last-child .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.textContent) === parseInt(v)));
+}
+function onRsiMinSlider(v) { rules.rsiMin = parseInt(v); setRsiMinUI(v); updateCurrentBadge('rsi'); }
+function onRsiMaxSlider(v) { rules.rsiMax = parseInt(v); setRsiMaxUI(v); updateCurrentBadge('rsi'); }
+function setRsiMin(v)       { rules.rsiMin = v; setRsiMinUI(v); updateCurrentBadge('rsi'); }
+function setRsiMax(v)       { rules.rsiMax = v; setRsiMaxUI(v); updateCurrentBadge('rsi'); }
+
+// ── Volume ───────────────────────────
+function setVolUI(v) {
+  document.getElementById('volSlider').value = v;
+  document.getElementById('volVal').textContent = parseFloat(v).toFixed(1) + '×';
+  updateSliderBg('volSlider', v, 1.0, 5.0);
+  document.querySelectorAll('#volConfig .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.textContent) === parseFloat(v)));
+}
+function onVolSlider(v) { rules.volMult = parseFloat(v); setVolUI(v); updateCurrentBadge('vol'); }
+function setVol(v)       { rules.volMult = v; setVolUI(v); updateCurrentBadge('vol'); }
+
+// ── Time ─────────────────────────────
+function setTimeStartUI(v) {
+  document.getElementById('timeStartSlider').value = v;
+  document.getElementById('timeStartVal').textContent = minsToTime(v);
+  updateSliderBg('timeStartSlider', v, 570, 630);
+  document.querySelectorAll('#timeConfig div:first-child .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseInt(b.onclick?.toString().match(/\d+/)?.[0]) === parseInt(v)));
+}
+function setTimeEndUI(v) {
+  document.getElementById('timeEndSlider').value = v;
+  document.getElementById('timeEndVal').textContent = minsToTime(v);
+  updateSliderBg('timeEndSlider', v, 780, 930);
+}
+function onTimeStartSlider(v) { rules.timeStart = parseInt(v); setTimeStartUI(v); updateCurrentBadge('time'); }
+function onTimeEndSlider(v)   { rules.timeEnd   = parseInt(v); setTimeEndUI(v);   updateCurrentBadge('time'); }
+function setTimeStart(v) { rules.timeStart = v; setTimeStartUI(v); updateCurrentBadge('time'); document.querySelectorAll('#timeConfig div:first-child .opt-btn').forEach(b=>{const m=b.onclick?.toString().match(/\d+/)?.[0];b.classList.toggle('active',parseInt(m)===v);}); }
+function setTimeEnd(v)   { rules.timeEnd   = v; setTimeEndUI(v);   updateCurrentBadge('time'); document.querySelectorAll('#timeConfig div:last-child .opt-btn').forEach(b=>{const m=b.onclick?.toString().match(/\d+/)?.[0];b.classList.toggle('active',parseInt(m)===v);}); }
+
+// ── Gap ──────────────────────────────
+function setGapDownUI(v) {
+  document.getElementById('gapDownSlider').value = v;
+  document.getElementById('gapDownVal').textContent = (v < 0 ? '−' : '+') + Math.abs(v) + '%';
+  updateSliderBg('gapDownSlider', v - (-8), 0, 8);  // invert for visual
+  document.querySelectorAll('#gapConfig div:first-child .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.onclick?.toString().match(/-?\d+(\.\d+)?/)?.[0]) === parseFloat(v)));
+}
+function setGapUpUI(v) {
+  document.getElementById('gapUpSlider').value = v;
+  document.getElementById('gapUpVal').textContent = '+' + v + '%';
+  updateSliderBg('gapUpSlider', v, 0, 8);
+  document.querySelectorAll('#gapConfig div:last-child .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.onclick?.toString().match(/-?\d+(\.\d+)?/)?.[0]) === parseFloat(v)));
+}
+function onGapDownSlider(v) { rules.gapDown = parseFloat(v); setGapDownUI(v); updateCurrentBadge('gap'); }
+function onGapUpSlider(v)   { rules.gapUp   = parseFloat(v); setGapUpUI(v);   updateCurrentBadge('gap'); }
+function setGapDown(v) { rules.gapDown = v; setGapDownUI(v); updateCurrentBadge('gap'); }
+function setGapUp(v)   { rules.gapUp   = v; setGapUpUI(v);   updateCurrentBadge('gap'); }
+
+// ── Slider gradient helper ────────────
+function updateSliderBg(id, val, min, max) {
+  const pct = ((val - min) / (max - min) * 100).toFixed(1);
+  document.getElementById(id).style.background =
+    `linear-gradient(to right, var(--green) 0%, var(--green) ${pct}%, var(--bg3) ${pct}%)`;
+}
+
+// ── Save / Reset ─────────────────────
+function saveRules() {
+  localStorage.setItem('gc_intraday_rules', JSON.stringify(rules));
+  const el = document.getElementById('saveConfirm');
+  el.style.display = 'inline';
+  setTimeout(() => el.style.display = 'none', 3500);
+}
+
+function resetDefaults() {
+  rules = { ...DEFAULTS };
+  applyToUI();
+}
+
+// ── Boot ─────────────────────────────
+loadRules();
+applyToUI();
+</script>
+</body>
+</html>

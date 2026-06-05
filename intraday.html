@@ -205,7 +205,8 @@ tr.buy-row td:first-child{border-left:3px solid var(--green);}
 <header class="hdr">
   <a href="/" class="logo"><div class="logo-mark">✦</div><span>GoldenSnitch</span></a>
   <a href="/"              class="nav-link">Scanner</a>
-  <a href="/intraday.html" class="nav-link active">⚡ Intraday</a>
+  <a href="/intraday.html"       class="nav-link active">⚡ Intraday</a>
+  <a href="/intraday-rules.html" class="nav-link">⚙ Intraday Rules</a>
   <a href="/intraday-backtest.html" class="nav-link">📋 Intraday BT</a>
   <a href="/backtest.html"  class="nav-link">Backtest</a>
   <a href="/optimize.html"  class="nav-link">Optimizer</a>
@@ -343,6 +344,55 @@ tr.buy-row td:first-child{border-left:3px solid var(--green);}
 function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('gc_theme',t);document.querySelectorAll('.theme-btn').forEach(b=>b.classList.toggle('active',b.dataset.t===t));}
 document.querySelectorAll('.theme-btn').forEach(b=>b.onclick=()=>applyTheme(b.dataset.t));
 applyTheme(localStorage.getItem('gc_theme')||'light');
+
+// ── Intraday Rules ────────────────────────────────────────
+const INTRADAY_RULE_DEFAULTS = {
+  requireVWAP: true,
+  requireEMA:  true,
+  requireADX:  true,  adxMin:    25,
+  requireRSI:  true,  rsiMin:    55,  rsiMax: 70,
+  requireVol:  true,  volMult:   2.0,
+  requireTime: true,  timeStart: 570, timeEnd: 885,
+  requireGap:  true,  gapDown:  -2,   gapUp:   3,
+};
+let intradayRules = { ...INTRADAY_RULE_DEFAULTS };
+
+function loadIntradayRules() {
+  try {
+    const saved = localStorage.getItem('gc_intraday_rules');
+    if (saved) intradayRules = { ...INTRADAY_RULE_DEFAULTS, ...JSON.parse(saved) };
+  } catch(e) {}
+}
+
+function applyRules(stock) {
+  // Re-evaluate isBuy using the active rules from intradayRules
+  const c = stock.conds || {};
+  const { adxMin, rsiMin, rsiMax, volMult, timeStart, timeEnd, gapDown, gapUp } = intradayRules;
+
+  const condVWAP = !intradayRules.requireVWAP || !!c.condVWAP;
+  const condEMA  = !intradayRules.requireEMA  || !!c.condEMA;
+  const condADX  = !intradayRules.requireADX  || (stock.adx != null && stock.adx > adxMin);
+  const condRSI  = !intradayRules.requireRSI  || (stock.rsi != null && stock.rsi >= rsiMin && stock.rsi <= rsiMax);
+  const condVol  = !intradayRules.requireVol  || (stock.volRatio >= volMult);
+  const condGap  = !intradayRules.requireGap  || (stock.gapPct >= gapDown && stock.gapPct <= gapUp);
+
+  // Time: recompute from current IST
+  let condTime = true;
+  if (intradayRules.requireTime) {
+    const now = new Date();
+    const ist = new Date(now.getTime() + 5.5*60*60*1000);
+    const istMins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
+    condTime = istMins >= timeStart && istMins <= timeEnd;
+  }
+
+  const isBuy = condVWAP && condEMA && condADX && condRSI && condVol && condTime && condGap;
+  return {
+    ...stock,
+    isBuy,
+    conds: { ...c, condVWAP: c.condVWAP, condEMA: c.condEMA, condADX: c.condADX, condRSI: c.condRSI, condVol: c.condVol, condTime: c.condTime },
+    _activeConds: { condVWAP, condEMA, condADX, condRSI, condVol, condTime, condGap },
+  };
+}
 
 // ── State ─────────────────────────────────────────────────
 let universe    = [];   // [{ticker, name, prevClose, atrPct, avgDailyVol}]
@@ -497,8 +547,10 @@ async function runScan(){
       });
       const j=await resp.json();
       if(j.ok){
-        allSignals.push(...(j.signals||[]));
-        allWatch.push(...(j.watchlist||[]));
+        // Apply user-configured rules to recompute isBuy
+        const allResults = [...(j.signals||[]), ...(j.watchlist||[])].map(applyRules);
+        allSignals.push(...allResults.filter(r=>r.isBuy));
+        allWatch.push(...allResults.filter(r=>!r.isBuy));
         if(j.signals?.length) totalCandles=j.signals[0].candles||0;
         lastScanTime=j.scanTime;
         document.getElementById('lastScanTime').textContent=j.scanTime||'—';
@@ -655,6 +707,7 @@ function renderTable(){
 function fmt(n){return n==null?'—':n.toLocaleString('en-IN',{maximumFractionDigits:2});}
 
 // ── Boot ──────────────────────────────────────────────────
+loadIntradayRules();
 setInterval(updateClock,1000);
 updateClock();
 
