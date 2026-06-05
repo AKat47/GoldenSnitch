@@ -54,22 +54,13 @@ button{font-family:var(--font);cursor:pointer;border:0;background:transparent;co
 .config{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:20px 24px;margin-bottom:20px;}
 .config-title{font-size:18px;font-weight:800;letter-spacing:-0.02em;margin-bottom:4px;}
 .config-sub{font-size:12.5px;color:var(--txt2);line-height:1.55;margin-bottom:18px;}
-.config-row{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;}
-.cfg-group{display:flex;flex-direction:column;gap:5px;}
-.cfg-label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt3);}
-.cfg-input{
-  width:90px;padding:8px 12px;border-radius:var(--r);
-  border:2px solid var(--border2);background:var(--bg);
-  font-size:15px;font-weight:800;font-family:var(--mono);color:var(--txt);
-  text-align:center;outline:none;transition:border-color .15s;
-}
-.cfg-input:focus{border-color:var(--gold);}
+.config-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
 .run-btn{
   display:flex;align-items:center;gap:8px;
   padding:11px 22px;border-radius:var(--r);
   background:var(--green);color:#fff;font-size:13px;font-weight:800;
   white-space:nowrap;transition:opacity .15s,transform .15s;
-  box-shadow:0 3px 10px rgba(0,168,84,.3);align-self:flex-end;
+  box-shadow:0 3px 10px rgba(0,168,84,.3);
 }
 .run-btn:hover{opacity:.88;transform:translateY(-1px);}
 .run-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;}
@@ -78,6 +69,27 @@ button{font-family:var(--font);cursor:pointer;border:0;background:transparent;co
   background:var(--blue-dim);border:1px solid var(--blue);
   font-size:12.5px;color:var(--blue);
 }
+/* Rules summary */
+.rules-panel{
+  padding:14px 18px;border-radius:var(--r);
+  background:var(--bg3);border:1px solid var(--border2);
+  margin-bottom:14px;
+}
+.rules-panel-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.rules-panel-top strong{font-size:12.5px;font-weight:700;color:var(--txt2);}
+.rules-edit{
+  margin-left:auto;font-size:12px;font-weight:700;color:var(--green);
+  text-decoration:none;padding:4px 10px;border-radius:999px;
+  border:1.5px solid var(--green-dim);background:var(--green-dim);
+  transition:opacity .12s;
+}
+.rules-edit:hover{opacity:.8;}
+.rule-pill{
+  padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;
+  background:var(--green-dim);color:var(--green);
+}
+.rule-pill.off{background:var(--bg);color:var(--txt3);border:1px solid var(--border2);}
+.rules-params{font-size:12px;color:var(--txt3);line-height:1.8;}
 
 /* Progress */
 .prog-wrap{margin-bottom:20px;display:none;}
@@ -175,24 +187,19 @@ tr.loss-row td:first-child{border-left:3px solid var(--red);}
   <!-- Config -->
   <div class="config">
     <div class="config-title">📋 Intraday Strategy Backtest</div>
-    <div class="config-sub">Replays the last 60 days of 5-min candles for each stock in your universe. Applies the same daily universe filter, gap filter, opening volume filter, and all buy/exit signal rules as the live scanner.</div>
+    <div class="config-sub">Replays the last 60 days of 5-min candles for each stock in your universe using the rules you configured on the Intraday Rules page.</div>
+
+    <!-- Rules summary panel -->
+    <div class="rules-panel" id="rulesPanel">
+      <div class="rules-panel-top">
+        <strong>Active rules:</strong>
+        <span id="rulesPills"></span>
+        <a href="/intraday-rules.html" class="rules-edit">⚙ Edit Rules</a>
+      </div>
+      <div class="rules-params" id="rulesParams"></div>
+    </div>
+
     <div class="config-row">
-      <div class="cfg-group">
-        <div class="cfg-label">Min ADX</div>
-        <input class="cfg-input" id="cfgAdx" type="number" value="25" min="10" max="50">
-      </div>
-      <div class="cfg-group">
-        <div class="cfg-label">RSI Min</div>
-        <input class="cfg-input" id="cfgRsiMin" type="number" value="55" min="30" max="65">
-      </div>
-      <div class="cfg-group">
-        <div class="cfg-label">RSI Max</div>
-        <input class="cfg-input" id="cfgRsiMax" type="number" value="70" min="60" max="80">
-      </div>
-      <div class="cfg-group">
-        <div class="cfg-label">Vol Mult</div>
-        <input class="cfg-input" id="cfgVol" type="number" value="2" min="1" max="5" step="0.5">
-      </div>
       <button class="run-btn" id="runBtn" onclick="startBacktest()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
         Run Backtest
@@ -327,6 +334,48 @@ function applyTheme(t){document.documentElement.setAttribute('data-theme',t);loc
 document.querySelectorAll('.theme-btn').forEach(b=>b.onclick=()=>applyTheme(b.dataset.t));
 applyTheme(localStorage.getItem('gc_theme')||'light');
 
+// ── Rules ─────────────────────────────
+const RULE_DEFAULTS = {
+  requireVWAP: true,
+  requireEMA:  true,
+  requireADX:  true,  adxMin:    25,
+  requireRSI:  true,  rsiMin:    55,  rsiMax: 70,
+  requireVol:  true,  volMult:   2.0,
+  requireTime: true,  timeStart: 570, timeEnd: 885,
+  requireGap:  true,  gapDown:  -2,   gapUp:   3,
+};
+let activeRules = { ...RULE_DEFAULTS };
+
+function loadRules() {
+  try {
+    const saved = localStorage.getItem('gc_intraday_rules');
+    if (saved) activeRules = { ...RULE_DEFAULTS, ...JSON.parse(saved) };
+  } catch(e) {}
+}
+
+function minsToTime(m) {
+  return `${Math.floor(m/60)}:${String(m%60).padStart(2,'0')}`;
+}
+
+function renderRulesPanel() {
+  const r = activeRules;
+  const NAMES = { vwap:'VWAP', ema:'EMA', adx:'ADX', rsi:'RSI', vol:'Volume', time:'Time', gap:'Gap' };
+  const ON = { vwap:'requireVWAP', ema:'requireEMA', adx:'requireADX', rsi:'requireRSI', vol:'requireVol', time:'requireTime', gap:'requireGap' };
+
+  document.getElementById('rulesPills').innerHTML = Object.entries(NAMES).map(([k,label]) => {
+    const on = r[ON[k]];
+    return `<span class="rule-pill ${on?'':'off'}">${label}</span>`;
+  }).join('');
+
+  const params = [];
+  if (r.requireADX)  params.push(`ADX &gt; ${r.adxMin}`);
+  if (r.requireRSI)  params.push(`RSI ${r.rsiMin}–${r.rsiMax}`);
+  if (r.requireVol)  params.push(`Vol &gt; ${r.volMult}× avg`);
+  if (r.requireTime) params.push(`Time ${minsToTime(r.timeStart)}–${minsToTime(r.timeEnd)}`);
+  if (r.requireGap)  params.push(`Gap ${r.gapDown}% to +${r.gapUp}%`);
+  document.getElementById('rulesParams').innerHTML = params.join(' &nbsp;·&nbsp; ');
+}
+
 // ── State ─────────────────────────────
 let allTrades=[], byStock=[], activeView='trades', tradeSortKey='date_desc';
 
@@ -364,12 +413,7 @@ const EXIT_CLS={'target':'target','sl':'sl','vwap_breach':'vwap','ema_cross':'em
 // ── Main runner ───────────────────────
 async function startBacktest(){
   if(!universe.length)return;
-  const cfg={
-    minAdx:  parseFloat(document.getElementById('cfgAdx').value)||25,
-    minRsi:  parseFloat(document.getElementById('cfgRsiMin').value)||55,
-    maxRsi:  parseFloat(document.getElementById('cfgRsiMax').value)||70,
-    volMult: parseFloat(document.getElementById('cfgVol').value)||2,
-  };
+  const cfg = { ...activeRules }; // send full rule set to API
   const btn=document.getElementById('runBtn');
   btn.disabled=true;
   btn.innerHTML=`<div class="spinner"></div> Running…`;
@@ -561,6 +605,8 @@ function setView(v){
 }
 
 // ── Boot ──────────────────────────────
+loadRules();
+renderRulesPanel();
 initNote();
 </script>
 </body>

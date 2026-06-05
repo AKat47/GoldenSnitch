@@ -1,9 +1,16 @@
 // api/intraday-backtest.js — Historical intraday strategy backtest
 //
-// Strategy: same rules as live scanner (VWAP, EMA9/21, ADX, RSI, Volume)
+// Strategy: same rules as live scanner, driven by user's intraday-rules config
 // Data: 60 days of 5-min OHLC + 90 days daily OHLC (Yahoo Finance)
 //
-// POST { symbols: [], minAdx: 25, minRsi: 55, maxRsi: 70, volMult: 2 }
+// POST {
+//   symbols: [],
+//   requireVWAP, requireEMA, requireADX, adxMin,
+//   requireRSI, rsiMin, rsiMax,
+//   requireVol, volMult,
+//   requireTime, timeStart, timeEnd,   (minutes since midnight IST)
+//   requireGap, gapDown, gapUp,
+// }
 // Returns { trades: [...], stats: {...} }
 
 const https = require('https');
@@ -177,15 +184,19 @@ function simulateDay(candles, prevClose, avgDailyVol, cfg) {
   const volumes=candles.map(r=>r.volume);
   const n=candles.length;
 
-  // Gap filter (based on first candle open vs prevClose)
-  const gapPct=prevClose ? (opens[0]-prevClose)/prevClose*100 : 0;
-  if(prevClose&&(gapPct<-2||gapPct>3)) return {skipped:'gap', gapPct:+gapPct.toFixed(2)};
+  // Gap filter — only if requireGap is on
+  const gapPct = prevClose ? (opens[0]-prevClose)/prevClose*100 : 0;
+  if(cfg.requireGap && prevClose) {
+    const gapDown = cfg.gapDown ?? -2;
+    const gapUp   = cfg.gapUp   ??  3;
+    if(gapPct < gapDown || gapPct > gapUp) return {skipped:'gap', gapPct:+gapPct.toFixed(2)};
+  }
 
-  // Opening volume filter
+  // Opening volume filter (always on — universe quality gate)
   const avgFiveMinVol = avgDailyVol ? avgDailyVol/75 : null;
   if(avgFiveMinVol&&volumes[0]<3*avgFiveMinVol) return {skipped:'opening_vol'};
 
-  // Build indicators on all candles of this day
+  // Build indicators
   const vwap  = vwapArr(highs, lows, closes, volumes);
   const ema9  = ema(closes, 9);
   const ema21 = ema(closes, 21);
@@ -193,72 +204,82 @@ function simulateDay(candles, prevClose, avgDailyVol, cfg) {
   const adxA  = adxCalc(highs, lows, closes, 14);
   const atr5  = atr(highs, lows, closes, 14);
 
+  // Time window from rules (default 9:30–14:45)
+  const timeStart = cfg.timeStart ?? 9*60+30;
+  const timeEnd   = cfg.timeEnd   ?? 14*60+45;
+
   let trade = null;
 
   for(let i=1; i<n; i++) {
     const m = candles[i].minsIST;
-    if(m < 9*60+30) continue;  // scan from 9:30
-    if(m > 14*60+45) break;     // no new entries after 14:45
+
+    // Hard floor: never enter before 9:15
+    if(m < 9*60+15) continue;
+
+    // Time window gate (only enforce if requireTime is on)
+    if(cfg.requireTime) {
+      if(m < timeStart) continue;
+      if(m > timeEnd)   break;
+    } else {
+      if(m > 15*60+10) break; // always stop entries at 15:10
+    }
 
     // Already in a trade — check exits
     if(trade&&!trade.exitTime) {
-      const exitMins = candles[i].minsIST;
-      let exitReason = null, exitPrice = null;
+      let exitReason=null, exitPrice=null;
 
-      if(highs[i] >= trade.target)     { exitPrice=trade.target;    exitReason='target'; }
-      else if(lows[i] <= trade.sl)     { exitPrice=trade.sl;        exitReason='sl'; }
-      else if(closes[i]<(vwap[i]||0)) { exitPrice=closes[i];       exitReason='vwap_breach'; }
+      if(highs[i] >= trade.target)     { exitPrice=trade.target; exitReason='target'; }
+      else if(lows[i] <= trade.sl)     { exitPrice=trade.sl;     exitReason='sl'; }
+      else if(closes[i]<(vwap[i]||0)) { exitPrice=closes[i];    exitReason='vwap_breach'; }
       else if(ema9[i]&&ema21[i]&&ema9[i]<ema21[i]) { exitPrice=closes[i]; exitReason='ema_cross'; }
-      else if(exitMins>=15*60+10)      { exitPrice=closes[i];       exitReason='time_exit'; }
+      else if(m >= 15*60+10)           { exitPrice=closes[i];    exitReason='time_exit'; }
 
       if(exitReason) {
-        trade.exitTime  = candles[i].time;
-        trade.exitPrice = +exitPrice.toFixed(2);
-        trade.exitReason= exitReason;
-        trade.pnlPct    = +((exitPrice-trade.entryPrice)/trade.entryPrice*100).toFixed(2);
-        trade.pnlRs     = +(exitPrice-trade.entryPrice).toFixed(2);
-        trade.candlesHeld = i - trade.entryIdx;
+        trade.exitTime   = candles[i].time;
+        trade.exitPrice  = +exitPrice.toFixed(2);
+        trade.exitReason = exitReason;
+        trade.pnlPct     = +((exitPrice-trade.entryPrice)/trade.entryPrice*100).toFixed(2);
+        trade.pnlRs      = +(exitPrice-trade.entryPrice).toFixed(2);
+        trade.candlesHeld= i - trade.entryIdx;
         break;
       }
       continue;
     }
 
-    if(trade) continue; // already exited
+    if(trade) continue;
 
-    // Check all BUY conditions
+    // Indicators at current candle
     const curClose=closes[i], curVWAP=vwap[i], curEMA9=ema9[i];
     const curEMA21=ema21[i], curRSI=rsiA[i], curADX=adxA[i], curATR=atr5[i];
     const vol20=volumes.slice(Math.max(0,i-20),i);
     const avgVol=vol20.length?vol20.reduce((a,b)=>a+b,0)/vol20.length:0;
 
-    // Reject conditions
-    if(curADX!=null&&curADX<20) continue;
-    if(curRSI!=null&&curRSI>75)  continue;
-    if(avgVol>0&&volumes[i]<=avgVol) continue;
+    // Hard reject: extreme readings (always applied regardless of toggles)
+    if(curADX!=null && curADX<15)      continue;
+    if(curRSI!=null && curRSI>80)       continue;
+    if(avgVol>0 && volumes[i]<=avgVol)  continue;
 
-    // Buy conditions
-    const condVWAP  = curVWAP!=null && curClose>curVWAP;
-    const condEMA   = curEMA9!=null && curEMA21!=null && curEMA9>curEMA21;
-    const condADX   = curADX!=null  && curADX>cfg.minAdx;
-    const condRSI   = curRSI!=null  && curRSI>=cfg.minRsi && curRSI<=cfg.maxRsi;
-    const condVol   = avgVol>0 && volumes[i]>cfg.volMult*avgVol;
+    // Rule-driven BUY conditions
+    const condVWAP = !cfg.requireVWAP || (curVWAP!=null && curClose>curVWAP);
+    const condEMA  = !cfg.requireEMA  || (curEMA9!=null && curEMA21!=null && curEMA9>curEMA21);
+    const condADX  = !cfg.requireADX  || (curADX!=null && curADX>(cfg.adxMin??25));
+    const condRSI  = !cfg.requireRSI  || (curRSI!=null && curRSI>=(cfg.rsiMin??55) && curRSI<=(cfg.rsiMax??70));
+    const condVol  = !cfg.requireVol  || (avgVol>0 && volumes[i]>(cfg.volMult??2)*avgVol);
 
     if(condVWAP && condEMA && condADX && condRSI && condVol) {
       if(!curATR) continue;
-      const entry = curClose;
-      const risk  = 1.5 * curATR;
+      const entry=curClose, risk=1.5*curATR;
       trade = {
         entryTime:  candles[i].time,
         entryIdx:   i,
         entryPrice: +entry.toFixed(2),
         sl:         +(entry-risk).toFixed(2),
         target:     +(entry+2*risk).toFixed(2),
-        vwapAtEntry:+curVWAP.toFixed(2),
-        adxAtEntry: +curADX.toFixed(1),
-        rsiAtEntry: +curRSI.toFixed(1),
-        volRatioAtEntry: avgVol>0?+(volumes[i]/avgVol).toFixed(2):null,
-        // will be filled on exit
-        exitTime:null, exitPrice:null, exitReason:null, pnlPct:null, pnlRs:null, candlesHeld:null
+        vwapAtEntry: curVWAP ? +curVWAP.toFixed(2) : null,
+        adxAtEntry:  curADX  ? +curADX.toFixed(1)  : null,
+        rsiAtEntry:  curRSI  ? +curRSI.toFixed(1)  : null,
+        volRatioAtEntry: avgVol>0 ? +(volumes[i]/avgVol).toFixed(2) : null,
+        exitTime:null, exitPrice:null, exitReason:null, pnlPct:null, pnlRs:null, candlesHeld:null,
       };
     }
   }
@@ -346,11 +367,24 @@ module.exports = async (req, res) => {
 
   const body    = typeof req.body==='string' ? JSON.parse(req.body) : req.body;
   const symbols = (body?.symbols||[]).slice(0,100);
+
+  // Full rules config from client (gc_intraday_rules)
   const cfg = {
-    minAdx:  parseFloat(body?.minAdx)  || 25,
-    minRsi:  parseFloat(body?.minRsi)  || 55,
-    maxRsi:  parseFloat(body?.maxRsi)  || 70,
-    volMult: parseFloat(body?.volMult) || 2,
+    requireVWAP:  body?.requireVWAP  !== false,
+    requireEMA:   body?.requireEMA   !== false,
+    requireADX:   body?.requireADX   !== false,
+    adxMin:       parseFloat(body?.adxMin)   || 25,
+    requireRSI:   body?.requireRSI   !== false,
+    rsiMin:       parseFloat(body?.rsiMin)   || 55,
+    rsiMax:       parseFloat(body?.rsiMax)   || 70,
+    requireVol:   body?.requireVol   !== false,
+    volMult:      parseFloat(body?.volMult)  || 2,
+    requireTime:  body?.requireTime  !== false,
+    timeStart:    parseInt(body?.timeStart)  || 570,
+    timeEnd:      parseInt(body?.timeEnd)    || 885,
+    requireGap:   body?.requireGap   !== false,
+    gapDown:      parseFloat(body?.gapDown)  ?? -2,
+    gapUp:        parseFloat(body?.gapUp)    ??  3,
   };
 
   const allTrades = [];
