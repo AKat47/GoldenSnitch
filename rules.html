@@ -248,6 +248,36 @@ button{font-family:var(--font);cursor:pointer;border:0;background:transparent;co
     </div>
   </div>
 
+  <!-- Rule 4: Traded Value -->
+  <div class="rule-card" id="tvCard">
+    <div class="rule-header">
+      <div class="rule-icon gold">₹</div>
+      <div class="rule-meta">
+        <div class="rule-name">Daily Traded Value</div>
+        <div class="rule-desc">Filters by liquidity. Requires the traded value on the golden cross day (close × volume) to exceed a minimum threshold in crores. Removes illiquid stocks where entry/exit slippage would be high.</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="tvToggle" onclick="toggleRule('tv')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="tvConfig">
+      <div class="config-label">Minimum traded value on cross day (₹ crore)</div>
+      <div class="slider-row">
+        <input class="slider" type="range" id="tvSlider" min="1" max="100" step="1" value="10"
+          oninput="onTvSlider(this.value)">
+        <div class="slider-val" id="tvVal">₹10 Cr</div>
+      </div>
+      <div class="slider-hint">Common thresholds:</div>
+      <div class="opt-row" style="margin-top:8px">
+        <button class="opt-btn" onclick="setTv(5)">₹5 Cr</button>
+        <button class="opt-btn active" onclick="setTv(10)">₹10 Cr</button>
+        <button class="opt-btn" onclick="setTv(25)">₹25 Cr</button>
+        <button class="opt-btn" onclick="setTv(50)">₹50 Cr</button>
+        <button class="opt-btn" onclick="setTv(100)">₹100 Cr</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Save -->
   <div class="save-row">
     <button class="save-btn" onclick="saveRules()">Save Rules</button>
@@ -281,6 +311,8 @@ const DEFAULT_RULES = {
   adxMin:        25,
   requireVolume: false,
   volumeMult:    1.5,
+  requireTV:     false,
+  tvMinCr:       10,        // ₹ crore  (close × volume / 1e7)
 };
 
 let rules = { ...DEFAULT_RULES };
@@ -297,12 +329,16 @@ function loadRules() {
 function applyToUI() {
   setToggle('adx', rules.requireADX);
   setToggle('vol', rules.requireVolume);
+  setToggle('tv',  rules.requireTV);
   document.getElementById('adxSlider').value = rules.adxMin;
   document.getElementById('adxVal').textContent = rules.adxMin;
   updateAdxSliderBg(rules.adxMin);
   document.getElementById('volSlider').value = rules.volumeMult;
   document.getElementById('volVal').textContent = rules.volumeMult.toFixed(1) + '×';
   updateVolSliderBg(rules.volumeMult);
+  document.getElementById('tvSlider').value = rules.tvMinCr;
+  document.getElementById('tvVal').textContent = '₹' + rules.tvMinCr + ' Cr';
+  updateTvSliderBg(rules.tvMinCr);
 }
 
 function setToggle(key, on) {
@@ -317,6 +353,7 @@ function setToggle(key, on) {
 function toggleRule(key) {
   if (key === 'adx') rules.requireADX    = !rules.requireADX;
   if (key === 'vol') rules.requireVolume = !rules.requireVolume;
+  if (key === 'tv')  rules.requireTV     = !rules.requireTV;
   applyToUI();
 }
 
@@ -358,6 +395,26 @@ function setVol(v) {
 function updateVolSliderBg(v) {
   const pct = ((v - 1) / (5 - 1) * 100).toFixed(1);
   document.getElementById('volSlider').style.background =
+    `linear-gradient(to right, var(--gold) 0%, var(--gold) ${pct}%, var(--bg3) ${pct}%)`;
+}
+
+// ── Traded value slider ───────────────
+function onTvSlider(v) {
+  rules.tvMinCr = parseInt(v);
+  document.getElementById('tvVal').textContent = '₹' + v + ' Cr';
+  updateTvSliderBg(v);
+  document.querySelectorAll('#tvConfig .opt-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.textContent.replace(/[^0-9]/g,'')) === parseInt(v));
+  });
+}
+function setTv(v) {
+  rules.tvMinCr = v;
+  document.getElementById('tvSlider').value = v;
+  onTvSlider(v);
+}
+function updateTvSliderBg(v) {
+  const pct = ((v - 1) / (100 - 1) * 100).toFixed(1);
+  document.getElementById('tvSlider').style.background =
     `linear-gradient(to right, var(--gold) 0%, var(--gold) ${pct}%, var(--bg3) ${pct}%)`;
 }
 

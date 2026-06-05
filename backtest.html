@@ -344,6 +344,7 @@ function renderRulesBar() {
     `<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--gold-dim);color:var(--gold);">✦ Golden Cross</span>`];
   if (r.requireADX)    chips.push(`<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--blue-dim);color:var(--blue);">ADX > ${r.adxMin||25}</span>`);
   if (r.requireVolume) chips.push(`<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--green-dim);color:var(--green);">Vol > ${r.volumeMult||1.5}× avg</span>`);
+  if (r.requireTV)     chips.push(`<span style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--gold-dim);color:var(--gold);">TV > ₹${r.tvMinCr||10} Cr</span>`);
   chips.push(`<a href="/rules.html" style="padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--border2);color:var(--txt2);text-decoration:none;">⚙ Edit rules</a>`);
   el.innerHTML = chips.join('');
   el.style.display = 'flex';

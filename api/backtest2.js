@@ -83,6 +83,11 @@ async function backtestSymbol(sym, rules) {
     if (!avgVol[crossIdx] || volumes[crossIdx] < rules.volumeMult * avgVol[crossIdx]) return null;
   }
 
+  // ── Rule: Daily traded value ──
+  if (rules.requireTV) {
+    if (closes[crossIdx] * volumes[crossIdx] < rules.tvMinCr * 1e7) return null;
+  }
+
   const entryPrice = closes[crossIdx];
   const entryDate  = dates[crossIdx];
   const tp = entryPrice * 1.10;
@@ -121,6 +126,8 @@ module.exports = async (req, res) => {
     adxMin:        parseFloat(body?.adxMin)     || 25,
     requireVolume: !!body?.requireVolume,
     volumeMult:    parseFloat(body?.volumeMult)  || 1.5,
+    requireTV:     !!body?.requireTV,
+    tvMinCr:       parseFloat(body?.tvMinCr)    || 10,
   };
 
   const results = [];

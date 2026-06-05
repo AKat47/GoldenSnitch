@@ -91,6 +91,12 @@ async function backtestSymbol(sym, rules) {
     if (!avg20 || crossVol < rules.volumeMult * avg20) return null;
   }
 
+  // ── Rule: Daily traded value (close × volume) ──
+  if (rules.requireTV) {
+    const tv = closes[idx] * volumes[idx]; // in ₹
+    if (tv < rules.tvMinCr * 1e7) return null; // 1 crore = 10^7
+  }
+
   const currentPrice  = ltp || closes[closes.length - 1];
   const pnlPct        = ((currentPrice - cross.price) / cross.price) * 100;
   const daysSince     = Math.floor((Date.now() - new Date(cross.date).getTime()) / 86400000);
@@ -123,6 +129,8 @@ module.exports = async (req, res) => {
     adxMin:        parseFloat(body?.adxMin)    || 25,
     requireVolume: !!body?.requireVolume,
     volumeMult:    parseFloat(body?.volumeMult) || 1.5,
+    requireTV:     !!body?.requireTV,
+    tvMinCr:       parseFloat(body?.tvMinCr)   || 10,
   };
 
   const results = [];
