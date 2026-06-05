@@ -187,12 +187,22 @@ module.exports = async (req, res) => {
       const { candles, source } = await fetchAngelCandles(sym, angelKey, angelClient);
       return res.status(200).json({ ok: true, symbol: sym, candles, source });
     } catch (e) {
-      console.warn('Angel One failed, falling back to Yahoo:', e.message);
-      // Fall through to Yahoo
+      // Return the Angel error explicitly so the browser can show it
+      // Include yahoo fallback data so the chart still works
+      try {
+        const { candles, name } = await fetchYahooCandles(sym);
+        return res.status(200).json({
+          ok: true, symbol: sym, name, candles,
+          source: 'yahoo',
+          angelError: e.message   // ← surfaced to browser
+        });
+      } catch (ye) {
+        return res.status(200).json({ ok: false, error: e.message + ' | Yahoo also failed: ' + ye.message });
+      }
     }
   }
 
-  // Yahoo Finance fallback
+  // Yahoo Finance only (no Angel credentials)
   try {
     const { candles, source, name } = await fetchYahooCandles(sym);
     return res.status(200).json({ ok: true, symbol: sym, name, candles, source });

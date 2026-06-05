@@ -457,6 +457,44 @@ canvas.price-chart{display:block;width:100%;height:320px;}
   </div>
 </main>
 
+<!-- Error modal -->
+<div id="errModal" style="display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.5);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg);border-radius:var(--rl);border:1px solid var(--border2);
+    box-shadow:var(--shadow-lg);width:100%;max-width:480px;overflow:hidden">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:12px;padding:18px 20px 14px;
+      border-bottom:1px solid var(--border)">
+      <div style="width:36px;height:36px;border-radius:9px;background:var(--red-dim);
+        display:grid;place-items:center;font-size:18px;flex-shrink:0">⚠</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700" id="errTitle">Angel One Error</div>
+        <div style="font-size:12px;color:var(--txt3);margin-top:2px">Chart loaded via Yahoo Finance fallback</div>
+      </div>
+    </div>
+    <!-- Error body -->
+    <div style="padding:16px 20px">
+      <div style="font-size:12px;font-weight:600;color:var(--txt3);text-transform:uppercase;
+        letter-spacing:.07em;margin-bottom:8px">Error from Angel One API</div>
+      <div id="errBody" style="font-family:var(--mono);font-size:13px;color:var(--red);
+        background:var(--red-dim);border-radius:var(--r);padding:14px 16px;
+        line-height:1.7;word-break:break-word;white-space:pre-wrap"></div>
+      <div style="margin-top:14px;padding:12px 14px;background:var(--bg3);border-radius:var(--r);
+        font-size:12.5px;color:var(--txt3);line-height:1.7" id="errHint"></div>
+    </div>
+    <!-- Actions -->
+    <div style="padding:0 20px 18px;display:flex;gap:10px">
+      <button onclick="closeErrModal()" style="flex:1;padding:11px;border-radius:999px;
+        border:1px solid var(--border2);background:var(--bg2);font-size:14px;
+        font-weight:600;color:var(--txt2);cursor:pointer">Close</button>
+      <button onclick="closeErrModal();showSettings()" style="flex:1;padding:11px;border-radius:999px;
+        background:var(--gold);color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+        Fix in Settings →</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -535,6 +573,42 @@ var AO = {
   clientId: localStorage.getItem('gc_angel_client') || ''
 };
 
+// ── Error modal ──────────────────────────────────
+function showErrModal(error) {
+  // Provide human-readable hints for common errors
+  var hints = {
+    'Invalid Token':      'Your TOTP or JWT has expired. This usually means ANGEL_TOTP_SECRET is wrong or the server clock is out of sync.',
+    'AB1010':             'Invalid credentials — check your API Key, mobile number, and PIN (ANGEL_PASSWORD env var).',
+    'AB1003':             'Session expired or invalid token. Re-save your credentials to trigger a fresh login.',
+    'login failed':       'Login failed — verify ANGEL_PASSWORD (your PIN) and ANGEL_TOTP_SECRET are correctly set in Vercel env vars.',
+    'TOTP':               'TOTP mismatch — your ANGEL_TOTP_SECRET may be wrong. Re-do the TOTP setup in Angel One app and copy the 32-char key.',
+    'not found':          'Symbol not found on Angel One. It may be listed differently — try the exact NSE ticker.',
+    'Token not found':    'Symbol lookup failed. Angel One couldn\'t find the NSE instrument token for this stock.',
+    'ANGEL_PASSWORD':     'ANGEL_PASSWORD env var is not set in Vercel. Add it in Vercel → Settings → Environment Variables.',
+    'ANGEL_TOTP_SECRET':  'ANGEL_TOTP_SECRET env var is not set in Vercel. Add it in Vercel → Settings → Environment Variables.',
+  };
+
+  var hint = '';
+  for (var key in hints) {
+    if (error && error.indexOf(key) !== -1) { hint = hints[key]; break; }
+  }
+  if (!hint) hint = 'Check your Angel One credentials in Settings. The chart has loaded via Yahoo Finance in the meantime.';
+
+  document.getElementById('errBody').textContent = error || 'Unknown error';
+  document.getElementById('errHint').textContent = '💡 ' + hint;
+  var modal = document.getElementById('errModal');
+  modal.style.display = 'flex';
+}
+
+function closeErrModal() {
+  document.getElementById('errModal').style.display = 'none';
+}
+
+// Close on backdrop click
+document.getElementById('errModal').addEventListener('click', function(e){
+  if (e.target === this) closeErrModal();
+});
+
 // ── Data source status pill ───────────────────────
 function updateSrcPill(source) {
   // source: 'angel' | 'yahoo' | 'testing' | null
@@ -588,19 +662,22 @@ async function testDataSource() {
       var src = json.source || 'yahoo';
       updateSrcPill(src);
       _currentDataSource = src === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
-      toast(src === 'angel' ? '✅ Angel One connected — real-time data active' : '⚠ Using Yahoo Finance — check Angel credentials');
-      if (btn) {
-        btn.textContent = src === 'angel' ? '✅ Angel One active' : '⚠ Fell back to Yahoo';
-        btn.style.color = src === 'angel' ? 'var(--green)' : 'var(--amber)';
+      if (src === 'angel') {
+        toast('✅ Angel One connected — real-time data active');
+        if (btn) { btn.textContent = '✅ Angel One active'; btn.style.color = 'var(--green)'; }
+      } else {
+        // Fell back — show the exact Angel error in the modal
+        if (json.angelError) showErrModal(json.angelError);
+        if (btn) { btn.textContent = '⚠ Fell back to Yahoo'; btn.style.color = 'var(--amber)'; }
       }
     } else {
       updateSrcPill('yahoo');
-      toast('⚠ ' + (json.error || 'Test failed — using Yahoo fallback'));
+      showErrModal(json.error || 'Unknown error — check Vercel logs');
       if (btn) { btn.textContent = '⚠ Test failed'; btn.style.color = 'var(--red)'; }
     }
   } catch(e) {
     updateSrcPill(null);
-    toast('Error: ' + e.message);
+    showErrModal(e.message);
   }
   if (btn) { setTimeout(function(){ btn.disabled=false; btn.textContent='Test Connection'; btn.style.color=''; }, 3000); }
 }
@@ -1028,6 +1105,8 @@ async function analyzeStock(sym) {
     var src = json.source || 'yahoo';
     _currentDataSource = src === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
     updateSrcPill(src);
+    // If Angel One failed and we fell back, show error modal
+    if (src !== 'angel' && json.angelError) showErrModal(json.angelError);
 
     var candles = json.candles;
     if(candles.length < 201) throw new Error('Not enough history (need 200+ days). Try a more liquid stock.');
