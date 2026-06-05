@@ -248,7 +248,36 @@ button{font-family:var(--font);cursor:pointer;border:0;background:transparent;co
     </div>
   </div>
 
-  <!-- Rule 4: Traded Value -->
+  <!-- Rule 4: Skip Penny -->
+  <div class="rule-card" id="pennyCard">
+    <div class="rule-header">
+      <div class="rule-icon red" style="background:var(--red-dim);">🚫</div>
+      <div class="rule-meta">
+        <div class="rule-name">Skip Penny Stocks</div>
+        <div class="rule-desc">Excludes stocks where the close price on the golden cross day is below a minimum threshold. Removes low-priced, speculative stocks that are prone to manipulation and high volatility.</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="pennyToggle" onclick="toggleRule('penny')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="pennyConfig">
+      <div class="config-label">Minimum close price on cross day (₹)</div>
+      <div class="slider-row">
+        <input class="slider" type="range" id="pennySlider" min="10" max="500" step="10" value="100"
+          oninput="onPennySlider(this.value)">
+        <div class="slider-val" id="pennyVal">₹100</div>
+      </div>
+      <div class="slider-hint">Common thresholds:</div>
+      <div class="opt-row" style="margin-top:8px">
+        <button class="opt-btn" onclick="setPenny(50)">₹50</button>
+        <button class="opt-btn active" onclick="setPenny(100)">₹100</button>
+        <button class="opt-btn" onclick="setPenny(200)">₹200</button>
+        <button class="opt-btn" onclick="setPenny(500)">₹500</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule 5: Traded Value -->
   <div class="rule-card" id="tvCard">
     <div class="rule-header">
       <div class="rule-icon gold">₹</div>
@@ -312,7 +341,9 @@ const DEFAULT_RULES = {
   requireVolume: false,
   volumeMult:    1.5,
   requireTV:     false,
-  tvMinCr:       10,        // ₹ crore  (close × volume / 1e7)
+  tvMinCr:       10,
+  skipPenny:     false,
+  minClose:      100,       // ₹
 };
 
 let rules = { ...DEFAULT_RULES };
@@ -327,9 +358,10 @@ function loadRules() {
 
 // ── Apply to UI ──────────────────────
 function applyToUI() {
-  setToggle('adx', rules.requireADX);
-  setToggle('vol', rules.requireVolume);
-  setToggle('tv',  rules.requireTV);
+  setToggle('adx',   rules.requireADX);
+  setToggle('vol',   rules.requireVolume);
+  setToggle('tv',    rules.requireTV);
+  setToggle('penny', rules.skipPenny);
   document.getElementById('adxSlider').value = rules.adxMin;
   document.getElementById('adxVal').textContent = rules.adxMin;
   updateAdxSliderBg(rules.adxMin);
@@ -339,6 +371,9 @@ function applyToUI() {
   document.getElementById('tvSlider').value = rules.tvMinCr;
   document.getElementById('tvVal').textContent = '₹' + rules.tvMinCr + ' Cr';
   updateTvSliderBg(rules.tvMinCr);
+  document.getElementById('pennySlider').value = rules.minClose;
+  document.getElementById('pennyVal').textContent = '₹' + rules.minClose;
+  updatePennySliderBg(rules.minClose);
 }
 
 function setToggle(key, on) {
@@ -351,9 +386,10 @@ function setToggle(key, on) {
 }
 
 function toggleRule(key) {
-  if (key === 'adx') rules.requireADX    = !rules.requireADX;
-  if (key === 'vol') rules.requireVolume = !rules.requireVolume;
-  if (key === 'tv')  rules.requireTV     = !rules.requireTV;
+  if (key === 'adx')   rules.requireADX    = !rules.requireADX;
+  if (key === 'vol')   rules.requireVolume = !rules.requireVolume;
+  if (key === 'tv')    rules.requireTV     = !rules.requireTV;
+  if (key === 'penny') rules.skipPenny     = !rules.skipPenny;
   applyToUI();
 }
 
@@ -395,6 +431,26 @@ function setVol(v) {
 function updateVolSliderBg(v) {
   const pct = ((v - 1) / (5 - 1) * 100).toFixed(1);
   document.getElementById('volSlider').style.background =
+    `linear-gradient(to right, var(--gold) 0%, var(--gold) ${pct}%, var(--bg3) ${pct}%)`;
+}
+
+// ── Penny slider ─────────────────────
+function onPennySlider(v) {
+  rules.minClose = parseInt(v);
+  document.getElementById('pennyVal').textContent = '₹' + v;
+  updatePennySliderBg(v);
+  document.querySelectorAll('#pennyConfig .opt-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.textContent.replace(/[^0-9]/g,'')) === parseInt(v));
+  });
+}
+function setPenny(v) {
+  rules.minClose = v;
+  document.getElementById('pennySlider').value = v;
+  onPennySlider(v);
+}
+function updatePennySliderBg(v) {
+  const pct = ((v - 10) / (500 - 10) * 100).toFixed(1);
+  document.getElementById('pennySlider').style.background =
     `linear-gradient(to right, var(--gold) 0%, var(--gold) ${pct}%, var(--bg3) ${pct}%)`;
 }
 
