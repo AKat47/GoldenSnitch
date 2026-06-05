@@ -10,6 +10,7 @@
     { "source": "/api/backtest3", "destination": "/api/backtest3.js" },
     { "source": "/api/optimize",           "destination": "/api/optimize.js"           },
     { "source": "/api/intraday-universe",  "destination": "/api/intraday-universe.js"  },
-    { "source": "/api/intraday-scan",      "destination": "/api/intraday-scan.js"      }
+    { "source": "/api/intraday-scan",      "destination": "/api/intraday-scan.js"      },
+    { "source": "/api/intraday-backtest", "destination": "/api/intraday-backtest.js" }
   ]
 }
