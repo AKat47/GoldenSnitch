@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>GoldenSnitch — Intraday Scanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script>(function(){var t=localStorage.getItem('gc_theme')||'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#ffffff;--bg2:#f7f8fa;--bg3:#eef0f4;--bg4:#e0e4ea;
+  --txt:#0b0d12;--txt2:#5b6472;--txt3:#98a0ad;
+  --border:#e6e8ec;--border2:#d4d8de;
+  --gold:#d97706;--gold-dim:rgba(217,119,6,.12);--gold-glow:rgba(251,191,36,.3);
+  --green:#00a854;--green-dim:rgba(0,168,84,.10);
+  --red:#e8443a;--red-dim:rgba(232,68,58,.10);
+  --blue:#3578f6;--blue-dim:rgba(53,120,246,.10);
+  --orange:#f97316;--orange-dim:rgba(249,115,22,.12);
+  --purple:#8b5cf6;--purple-dim:rgba(139,92,246,.12);
+  --r:10px;--rl:16px;
+  --font:'Inter',-apple-system,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+[data-theme="dark"]{
+  --bg:#07090c;--bg2:#11151c;--bg3:#181d26;--bg4:#1f242e;
+  --txt:#f5f7fa;--txt2:#99a2b1;--txt3:#5a6473;
+  --border:#1f242e;--border2:#2a313d;
+  --gold:#fbbf24;--gold-dim:rgba(251,191,36,.14);--gold-glow:rgba(251,191,36,.25);
+  --green:#34d399;--green-dim:rgba(52,211,153,.12);
+  --red:#ff6961;--red-dim:rgba(255,105,97,.16);
+}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--font);
+  -webkit-font-smoothing:antialiased;letter-spacing:-0.01em;font-size:14px;}
+button{font-family:var(--font);cursor:pointer;border:0;background:transparent;color:inherit;}
+
+/* ── Header ─── */
+.hdr{display:flex;align-items:center;gap:10px;padding:12px 24px;border-bottom:1px solid var(--border);
+  background:var(--bg);position:sticky;top:0;z-index:50;flex-wrap:wrap;}
+.logo{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:800;letter-spacing:-0.03em;text-decoration:none;color:var(--txt);flex-shrink:0;}
+.logo-mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#f59e0b,#d97706);display:grid;place-items:center;font-size:17px;box-shadow:0 3px 12px var(--gold-glow);}
+.logo span{background:linear-gradient(135deg,#f59e0b,#d97706);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.nav-link{padding:6px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--txt2);text-decoration:none;white-space:nowrap;transition:all .12s;}
+.nav-link:hover{color:var(--txt);background:var(--bg2);}
+.nav-link.active{color:var(--green);background:var(--green-dim);}
+.hdr-right{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0;}
+.theme-toggle{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);}
+.theme-btn{padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600;color:var(--txt3);background:transparent;appearance:none;border:none;cursor:pointer;transition:all .12s;}
+.theme-btn.active{background:var(--bg);color:var(--txt);box-shadow:0 1px 3px rgba(11,13,18,.08);}
+[data-theme="dark"] .theme-btn.active{background:var(--bg4);}
+
+/* ── Main ─── */
+.main{padding:24px 24px 80px;max-width:1400px;margin:0 auto;}
+
+/* ── Market status bar ─── */
+.status-bar{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px 20px;margin-bottom:20px;
+}
+.market-badge{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 14px;border-radius:999px;font-size:12.5px;font-weight:800;
+}
+.market-badge.open  {background:var(--green-dim);color:var(--green);}
+.market-badge.closed{background:var(--red-dim);color:var(--red);}
+.market-badge.pre   {background:var(--orange-dim);color:var(--orange);}
+.pulse{width:8px;height:8px;border-radius:50%;flex-shrink:0;animation:pulse 1.4s ease-in-out infinite;}
+.pulse.green{background:var(--green);box-shadow:0 0 0 0 rgba(0,168,84,.4);}
+.pulse.red  {background:var(--red);}
+.pulse.orange{background:var(--orange);}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,168,84,.4);}50%{box-shadow:0 0 0 6px rgba(0,168,84,0);}}
+.status-clock{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--txt);}
+.status-sep{color:var(--border2);}
+.status-item{font-size:12.5px;color:var(--txt2);}
+.status-item strong{color:var(--txt);font-weight:700;}
+.next-scan{margin-left:auto;font-size:12.5px;color:var(--txt3);display:flex;align-items:center;gap:8px;}
+.countdown{font-family:var(--mono);font-weight:700;color:var(--gold);}
+
+/* ── Phase panels ─── */
+.phase{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:20px 24px;margin-bottom:20px;}
+.phase-title{font-size:14px;font-weight:800;margin-bottom:4px;display:flex;align-items:center;gap:10px;}
+.phase-badge{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
+.phase-badge.done{background:var(--green-dim);color:var(--green);}
+.phase-badge.active{background:var(--gold-dim);color:var(--gold);}
+.phase-badge.waiting{background:var(--bg3);color:var(--txt3);}
+.phase-sub{font-size:12.5px;color:var(--txt2);margin-bottom:14px;line-height:1.5;}
+.phase-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+
+.action-btn{
+  display:flex;align-items:center;gap:7px;
+  padding:10px 20px;border-radius:var(--r);
+  font-size:13px;font-weight:700;color:#fff;
+  transition:opacity .15s,transform .15s;
+}
+.action-btn.green {background:var(--green);box-shadow:0 3px 10px rgba(0,168,84,.3);}
+.action-btn.gold  {background:var(--gold); box-shadow:0 3px 10px var(--gold-glow);}
+.action-btn.blue  {background:var(--blue); box-shadow:0 3px 10px rgba(53,120,246,.3);}
+.action-btn:hover {opacity:.88;transform:translateY(-1px);}
+.action-btn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+
+.stat-chip{
+  padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:700;
+  background:var(--bg3);color:var(--txt2);display:flex;align-items:center;gap:6px;
+}
+.stat-chip .val{font-family:var(--mono);color:var(--txt);}
+
+/* Auto-scan toggle */
+.toggle-row{display:flex;align-items:center;gap:10px;}
+.auto-label{font-size:12.5px;font-weight:600;color:var(--txt2);}
+.sw{position:relative;width:40px;height:22px;display:inline-block;}
+.sw input{opacity:0;width:0;height:0;}
+.sw-track{position:absolute;inset:0;border-radius:99px;background:var(--bg3);cursor:pointer;transition:.2s;}
+.sw input:checked+.sw-track{background:var(--green);}
+.sw-track::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;top:3px;left:3px;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+.sw input:checked+.sw-track::before{transform:translateX(18px);}
+
+/* ── Progress ─── */
+.prog-wrap{margin-bottom:16px;display:none;}
+.prog-wrap.visible{display:block;}
+.prog-label{display:flex;justify-content:space-between;font-size:12px;color:var(--txt3);margin-bottom:5px;}
+.prog-bar{height:4px;background:var(--bg3);border-radius:99px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),#00c853);border-radius:99px;transition:width .3s;width:0%;}
+
+/* ── Signal cards (top 3) ─── */
+.signal-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-bottom:24px;}
+.sig-card{
+  background:var(--bg2);border:1.5px solid var(--border);
+  border-radius:var(--rl);padding:16px 18px;position:relative;
+  transition:border-color .15s;
+}
+.sig-card.buy{border-color:var(--green);}
+.sig-card-rank{position:absolute;top:12px;right:14px;font-size:18px;}
+.sig-ticker{font-size:14px;font-weight:800;font-family:var(--mono);color:var(--green);}
+.sig-name{font-size:11.5px;color:var(--txt3);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sig-price{font-size:22px;font-weight:800;font-family:var(--mono);color:var(--txt);margin-bottom:8px;}
+.sig-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;}
+.sig-row-label{color:var(--txt3);}
+.sig-row-val{font-weight:700;font-family:var(--mono);}
+.sig-levels{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.level-chip{padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;font-family:var(--mono);}
+.level-chip.entry{background:var(--blue-dim);color:var(--blue);}
+.level-chip.sl   {background:var(--red-dim);color:var(--red);}
+.level-chip.tgt  {background:var(--green-dim);color:var(--green);}
+
+/* ── Condition dots ─── */
+.cond-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.cond{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;
+}
+.cond.ok {background:var(--green-dim);color:var(--green);}
+.cond.fail{background:var(--red-dim);color:var(--red);}
+.cond.na {background:var(--bg3);color:var(--txt3);}
+
+/* ── Table ─── */
+.tbl-header{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+.tbl-title{font-size:15px;font-weight:800;letter-spacing:-0.02em;}
+.filter-tabs{display:flex;gap:3px;background:var(--bg2);border:1px solid var(--border);border-radius:999px;padding:3px;}
+.ftab{padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--txt3);cursor:pointer;transition:all .12s;}
+.ftab.active{background:var(--bg);color:var(--txt);box-shadow:0 1px 3px rgba(11,13,18,.08);}
+[data-theme="dark"] .ftab.active{background:var(--bg4);}
+.search-box{padding:7px 12px;border-radius:999px;border:1px solid var(--border2);background:var(--bg2);font-size:12.5px;color:var(--txt);outline:none;max-width:200px;}
+.search-box:focus{border-color:var(--green);}
+
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--rl);}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead{background:var(--bg2);position:sticky;top:0;z-index:5;}
+th{padding:10px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--txt3);border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:var(--bg2);}
+tr.buy-row td:first-child{border-left:3px solid var(--green);}
+
+.sym-cell{font-weight:800;font-family:var(--mono);font-size:13px;}
+.price-cell{font-family:var(--mono);}
+.mono{font-family:var(--mono);}
+.buy-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;background:var(--green-dim);color:var(--green);}
+.watch-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;background:var(--blue-dim);color:var(--blue);}
+.score-badge{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:999px;font-size:11px;font-weight:800;font-family:var(--mono);}
+.score-badge.high{background:var(--green-dim);color:var(--green);}
+.score-badge.mid {background:var(--gold-dim);color:var(--gold);}
+.score-badge.low {background:var(--bg3);color:var(--txt3);}
+
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.dot.ok{background:var(--green);}
+.dot.fail{background:var(--red);}
+.dot.na{background:var(--txt3);}
+
+/* ── Empty state ─── */
+.empty{text-align:center;padding:60px 24px;color:var(--txt3);}
+.empty-icon{font-size:40px;margin-bottom:10px;}
+.empty-title{font-size:16px;font-weight:700;color:var(--txt2);margin-bottom:6px;}
+
+/* Spinner */
+.spinner{display:inline-block;width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .7s linear infinite;flex-shrink:0;}
+.spinner-dark{border:2px solid var(--border);border-top-color:var(--txt2);}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <a href="/" class="logo"><div class="logo-mark">✦</div><span>GoldenSnitch</span></a>
+  <a href="/"              class="nav-link">Scanner</a>
+  <a href="/intraday.html" class="nav-link active">⚡ Intraday</a>
+  <a href="/backtest.html"  class="nav-link">Backtest</a>
+  <a href="/optimize.html"  class="nav-link">Optimizer</a>
+  <a href="/rules.html"     class="nav-link">⚙ Rules</a>
+  <div class="hdr-right">
+    <div class="theme-toggle">
+      <button class="theme-btn" data-t="light">Light</button>
+      <button class="theme-btn" data-t="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- Market status bar -->
+  <div class="status-bar">
+    <div class="market-badge" id="marketBadge">
+      <div class="pulse" id="marketPulse"></div>
+      <span id="marketStatus">Checking…</span>
+    </div>
+    <div class="status-clock" id="istClock">—</div>
+    <div class="status-sep">·</div>
+    <div class="status-item">Universe: <strong id="universeCount">—</strong> stocks</div>
+    <div class="status-sep">·</div>
+    <div class="status-item">Last scan: <strong id="lastScanTime">—</strong></div>
+    <div class="status-sep">·</div>
+    <div class="status-item">Signals: <strong id="signalCount" style="color:var(--green)">—</strong></div>
+    <div class="next-scan" id="nextScanWrap" style="display:none">
+      Next scan in <span class="countdown" id="countdown">5:00</span>
+      <button onclick="runScan()" title="Scan now" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border2);font-size:11px;font-weight:700;color:var(--txt2);">Scan now</button>
+    </div>
+  </div>
+
+  <!-- Phase 1: Universe Prep -->
+  <div class="phase" id="phase1">
+    <div class="phase-title">
+      <span>Step 1 — Daily Universe</span>
+      <span class="phase-badge" id="p1Badge">Waiting</span>
+    </div>
+    <div class="phase-sub">Run before market open. Fetches all NSE stocks and applies quality filters: Close > ₹100 · 20-day avg turnover > ₹20 Cr · ATR% between 1.5% and 8%.</div>
+    <div class="phase-row">
+      <button class="action-btn green" id="universeBtn" onclick="buildUniverse()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        Build Universe
+      </button>
+      <div class="stat-chip">Qualified: <span class="val" id="qualifiedCount">—</span></div>
+      <div class="stat-chip">Filtered out: <span class="val" id="filteredOut">—</span></div>
+    </div>
+    <div class="prog-wrap" id="p1Prog">
+      <div class="prog-label"><span id="p1ProgLabel">Scanning…</span><span id="p1ProgPct">0%</span></div>
+      <div class="prog-bar"><div class="prog-fill" id="p1Fill"></div></div>
+    </div>
+  </div>
+
+  <!-- Phase 2: Scanner -->
+  <div class="phase" id="phase2">
+    <div class="phase-title">
+      <span>Step 2 — Live 5-Min Scanner</span>
+      <span class="phase-badge" id="p2Badge">Waiting</span>
+    </div>
+    <div class="phase-sub">Scans qualified stocks every 5 minutes using VWAP, EMA9/21, ADX, RSI, Volume. Active window: 09:30–14:45 IST. Force exit at 15:10.</div>
+    <div class="phase-row">
+      <button class="action-btn gold" id="scanBtn" onclick="runScan()" disabled>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Scan Now
+      </button>
+      <label class="toggle-row">
+        <div class="sw"><input type="checkbox" id="autoToggle" onchange="toggleAuto()"><div class="sw-track"></div></div>
+        <span class="auto-label">Auto (every 5 min)</span>
+      </label>
+      <div class="stat-chip">Scanned: <span class="val" id="scannedCount">—</span></div>
+      <div class="stat-chip">Candles: <span class="val" id="candleInfo">—</span></div>
+    </div>
+    <div class="prog-wrap" id="p2Prog">
+      <div class="prog-label"><span id="p2ProgLabel">Scanning…</span><span id="p2ProgPct">0%</span></div>
+      <div class="prog-bar"><div class="prog-fill" id="p2Fill"></div></div>
+    </div>
+  </div>
+
+  <!-- Signal cards -->
+  <div id="signalCardsWrap" style="display:none">
+    <div style="font-size:14px;font-weight:800;margin-bottom:12px;">🟢 Buy Signals</div>
+    <div class="signal-cards" id="signalCards"></div>
+  </div>
+
+  <!-- Table -->
+  <div id="tableWrap" style="display:none">
+    <div class="tbl-header">
+      <div class="tbl-title">Scan Results</div>
+      <div class="filter-tabs">
+        <div class="ftab active" data-f="buy"   onclick="setFilter('buy')">BUY ✓</div>
+        <div class="ftab"        data-f="watch" onclick="setFilter('watch')">Watchlist</div>
+        <div class="ftab"        data-f="all"   onclick="setFilter('all')">All</div>
+      </div>
+      <input class="search-box" id="searchBox" placeholder="Search…" oninput="renderTable()">
+      <span style="font-size:12px;color:var(--txt3);margin-left:auto;" id="rowCount"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Price</th>
+            <th>Gap%</th>
+            <th>VWAP</th>
+            <th>EMA9/21</th>
+            <th>ADX</th>
+            <th>RSI</th>
+            <th>Vol×</th>
+            <th>Conditions</th>
+            <th>Score</th>
+            <th>Entry</th>
+            <th>SL</th>
+            <th>Target</th>
+            <th>R:R</th>
+            <th>Signal</th>
+          </tr>
+        </thead>
+        <tbody id="tblBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty" id="emptyState">
+    <div class="empty-icon">⚡</div>
+    <div class="empty-title">Ready to scan</div>
+    <div style="font-size:13px;color:var(--txt3);margin-top:4px;">Build the daily universe first, then start the scanner during market hours (09:15–15:30 IST).</div>
+  </div>
+
+</main>
+
+<script>
+// ── Theme ─────────────────────────────────────────────────
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('gc_theme',t);document.querySelectorAll('.theme-btn').forEach(b=>b.classList.toggle('active',b.dataset.t===t));}
+document.querySelectorAll('.theme-btn').forEach(b=>b.onclick=()=>applyTheme(b.dataset.t));
+applyTheme(localStorage.getItem('gc_theme')||'light');
+
+// ── State ─────────────────────────────────────────────────
+let universe    = [];   // [{ticker, name, prevClose, atrPct, avgDailyVol}]
+let prevCloses  = {};
+let avgDailyVols= {};
+let atrPcts     = {};
+let allSignals  = [];
+let allWatch    = [];
+let activeFilter= 'buy';
+let autoTimer   = null;
+let countTimer  = null;
+let countSecs   = 300;
+let scanning    = false;
+let lastScanTime= null;
+
+// ── IST helpers ───────────────────────────────────────────
+function getIST(){
+  const now=new Date();
+  const ist=new Date(now.getTime()+5.5*60*60*1000);
+  return{h:ist.getUTCHours(),m:ist.getUTCMinutes(),s:ist.getUTCSeconds(),
+    total:ist.getUTCHours()*60+ist.getUTCMinutes()};
+}
+function istStr(){
+  const t=getIST();
+  return String(t.h).padStart(2,'0')+':'+String(t.m).padStart(2,'0')+':'+String(t.s).padStart(2,'0');
+}
+function marketPhase(){
+  const t=getIST().total;
+  if(t<9*60+15)  return'pre';
+  if(t<9*60+30)  return'opening';
+  if(t<=15*60+30)return'open';
+  return'closed';
+}
+
+// ── Clock & status ────────────────────────────────────────
+function updateClock(){
+  document.getElementById('istClock').textContent=istStr()+' IST';
+  const phase=marketPhase();
+  const badge=document.getElementById('marketBadge');
+  const pulse=document.getElementById('marketPulse');
+  const label=document.getElementById('marketStatus');
+  badge.className='market-badge '+(phase==='open'?'open':phase==='pre'?'pre':'closed');
+  pulse.className='pulse '+(phase==='open'?'green':phase==='pre'?'orange':'red');
+  label.textContent=phase==='open'?'Market Open':phase==='pre'?'Pre-Market':phase==='opening'?'Opening':'Market Closed';
+  document.getElementById('scanBtn').disabled=(phase!=='open'&&phase!=='opening')||universe.length===0;
+}
+
+// ── Fetch stocks ──────────────────────────────────────────
+async function fetchStocks(){
+  const r=await fetch('/api/stocks');
+  const j=await r.json();
+  if(!j.ok)throw new Error('Failed');
+  return j.stocks;
+}
+function chunk(arr,n){const o=[];for(let i=0;i<arr.length;i+=n)o.push(arr.slice(i,i+n));return o;}
+
+// ── Save / load universe ──────────────────────────────────
+function saveUniverse(){
+  const today=new Date().toISOString().split('T')[0];
+  try{localStorage.setItem('gc_id_universe_date',today);localStorage.setItem('gc_id_universe',JSON.stringify(universe));}catch(e){}
+}
+function loadUniverse(){
+  try{
+    const today=new Date().toISOString().split('T')[0];
+    if(localStorage.getItem('gc_id_universe_date')!==today)return false;
+    const data=JSON.parse(localStorage.getItem('gc_id_universe')||'[]');
+    if(!data.length)return false;
+    universe=data;
+    prevCloses={};avgDailyVols={};atrPcts={};
+    universe.forEach(s=>{prevCloses[s.ticker]=s.prevClose;avgDailyVols[s.ticker]=s.avgDailyVol;atrPcts[s.ticker]=s.atrPct;});
+    return true;
+  }catch(e){return false;}
+}
+
+// ── Phase 1: Build universe ───────────────────────────────
+async function buildUniverse(){
+  const btn=document.getElementById('universeBtn');
+  btn.disabled=true;
+  btn.innerHTML=`<div class="spinner"></div> Building…`;
+
+  const pw=document.getElementById('p1Prog');
+  pw.classList.add('visible');
+
+  let stocks;
+  try{stocks=await fetchStocks();}
+  catch(e){alert('Failed to load stock list');btn.disabled=false;btn.textContent='Build Universe';return;}
+
+  const symbols=stocks.map(s=>s.ticker);
+  const batches=chunk(symbols,50);
+  universe=[];
+  let done=0;
+
+  for(let b=0;b<batches.length;b++){
+    try{
+      const resp=await fetch('/api/intraday-universe',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({symbols:batches[b]})
+      });
+      const j=await resp.json();
+      if(j.ok&&j.universe)universe.push(...j.universe);
+    }catch(e){}
+
+    done+=batches[b].length;
+    const pct=Math.round(done/symbols.length*100);
+    document.getElementById('p1Fill').style.width=pct+'%';
+    document.getElementById('p1ProgPct').textContent=pct+'%';
+    document.getElementById('p1ProgLabel').textContent=`Filtering… (${done}/${symbols.length}) · ${universe.length} qualified`;
+    document.getElementById('qualifiedCount').textContent=universe.length;
+    document.getElementById('filteredOut').textContent=done-universe.length;
+  }
+
+  // Build lookup maps
+  prevCloses={};avgDailyVols={};atrPcts={};
+  universe.forEach(s=>{prevCloses[s.ticker]=s.prevClose;avgDailyVols[s.ticker]=s.avgDailyVol;atrPcts[s.ticker]=s.atrPct;});
+
+  saveUniverse();
+  document.getElementById('p1Badge').textContent='Done ✓';
+  document.getElementById('p1Badge').className='phase-badge done';
+  document.getElementById('universeCount').textContent=universe.length;
+  document.getElementById('scanBtn').disabled=marketPhase()==='closed';
+  document.getElementById('p2Badge').className='phase-badge active';
+  document.getElementById('p2Badge').textContent='Ready';
+
+  pw.classList.remove('visible');
+  btn.disabled=false;
+  btn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> Rebuild`;
+  document.getElementById('emptyState').style.display='none';
+}
+
+// ── Phase 2: Run scan ─────────────────────────────────────
+async function runScan(){
+  if(scanning||universe.length===0)return;
+  scanning=true;
+
+  const btn=document.getElementById('scanBtn');
+  btn.disabled=true;
+  btn.innerHTML=`<div class="spinner"></div> Scanning…`;
+
+  const pw=document.getElementById('p2Prog');
+  pw.classList.add('visible');
+
+  const symbols=universe.map(s=>s.ticker);
+  const batches=chunk(symbols,40);
+  allSignals=[];allWatch=[];
+  let done=0,totalCandles=0;
+
+  for(let b=0;b<batches.length;b++){
+    try{
+      const resp=await fetch('/api/intraday-scan',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({symbols:batches[b],prevCloses,avgDailyVols,atrPcts})
+      });
+      const j=await resp.json();
+      if(j.ok){
+        allSignals.push(...(j.signals||[]));
+        allWatch.push(...(j.watchlist||[]));
+        if(j.signals?.length) totalCandles=j.signals[0].candles||0;
+        lastScanTime=j.scanTime;
+        document.getElementById('lastScanTime').textContent=j.scanTime||'—';
+        renderAll();
+        document.getElementById('tableWrap').style.display='';
+        document.getElementById('emptyState').style.display='none';
+      }
+    }catch(e){}
+
+    done+=batches[b].length;
+    const pct=Math.round(done/symbols.length*100);
+    document.getElementById('p2Fill').style.width=pct+'%';
+    document.getElementById('p2ProgPct').textContent=pct+'%';
+    document.getElementById('p2ProgLabel').textContent=`Scanning ${done}/${symbols.length} · ${allSignals.length} BUY signals`;
+  }
+
+  document.getElementById('scannedCount').textContent=symbols.length;
+  document.getElementById('candleInfo').textContent=totalCandles?totalCandles+' candles':'—';
+  document.getElementById('signalCount').textContent=allSignals.length;
+  document.getElementById('p2Badge').className='phase-badge done';
+  document.getElementById('p2Badge').textContent='Active';
+
+  pw.classList.remove('visible');
+  scanning=false;
+  btn.disabled=false;
+  btn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Scan Now`;
+
+  renderAll();
+  resetCountdown();
+}
+
+// ── Auto scan ─────────────────────────────────────────────
+function toggleAuto(){
+  const on=document.getElementById('autoToggle').checked;
+  if(on){
+    document.getElementById('nextScanWrap').style.display='flex';
+    resetCountdown();
+    runScan();
+  }else{
+    clearInterval(autoTimer);clearInterval(countTimer);
+    document.getElementById('nextScanWrap').style.display='none';
+  }
+}
+function resetCountdown(){
+  clearInterval(autoTimer);clearInterval(countTimer);
+  if(!document.getElementById('autoToggle').checked)return;
+  countSecs=300;
+  countTimer=setInterval(()=>{
+    countSecs--;
+    const m=Math.floor(countSecs/60),s=countSecs%60;
+    document.getElementById('countdown').textContent=m+':'+String(s).padStart(2,'0');
+    if(countSecs<=0){clearInterval(countTimer);runScan();}
+  },1000);
+}
+
+// ── Render signals ────────────────────────────────────────
+function renderAll(){
+  renderCards();
+  renderTable();
+}
+
+const medals=['🥇','🥈','🥉','4️⃣','5️⃣'];
+function renderCards(){
+  const top=allSignals.slice(0,5);
+  const wrap=document.getElementById('signalCardsWrap');
+  if(!top.length){wrap.style.display='none';return;}
+  wrap.style.display='';
+  document.getElementById('signalCards').innerHTML=top.map((s,i)=>`
+    <div class="sig-card buy">
+      <div class="sig-card-rank">${medals[i]||''}</div>
+      <div class="sig-ticker">${s.ticker}</div>
+      <div class="sig-name">${s.name}</div>
+      <div class="sig-price">₹${fmt(s.ltp)}</div>
+      <div class="sig-row"><span class="sig-row-label">VWAP</span><span class="sig-row-val">₹${fmt(s.vwap)}</span></div>
+      <div class="sig-row"><span class="sig-row-label">ADX</span><span class="sig-row-val">${s.adx??'—'}</span></div>
+      <div class="sig-row"><span class="sig-row-label">RSI</span><span class="sig-row-val">${s.rsi??'—'}</span></div>
+      <div class="sig-row"><span class="sig-row-label">Vol×</span><span class="sig-row-val">${s.volRatio}×</span></div>
+      <div class="sig-row"><span class="sig-row-label">Score</span><span class="sig-row-val" style="color:var(--green)">${s.score}</span></div>
+      <div class="sig-levels">
+        <span class="level-chip entry">E ₹${s.entry}</span>
+        <span class="level-chip sl">SL ₹${s.sl}</span>
+        <span class="level-chip tgt">T ₹${s.target}</span>
+      </div>
+      <div class="cond-row">
+        ${condDot('VWAP',s.conds?.condVWAP)}${condDot('EMA',s.conds?.condEMA)}${condDot('ADX',s.conds?.condADX)}${condDot('RSI',s.conds?.condRSI)}${condDot('Vol',s.conds?.condVol)}
+      </div>
+    </div>
+  `).join('');
+}
+
+function condDot(label,val){
+  const cls=val==null?'na':val?'ok':'fail';
+  return`<span class="cond ${cls}">${val==null?'·':val?'✓':'✗'} ${label}</span>`;
+}
+
+function setFilter(f){
+  activeFilter=f;
+  document.querySelectorAll('.ftab').forEach(t=>t.classList.toggle('active',t.dataset.f===f));
+  renderTable();
+}
+
+function renderTable(){
+  const q=(document.getElementById('searchBox')?.value||'').toLowerCase();
+  let rows;
+  if(activeFilter==='buy')   rows=allSignals;
+  else if(activeFilter==='watch') rows=allWatch;
+  else rows=[...allSignals,...allWatch].sort((a,b)=>b.score-a.score);
+
+  if(q) rows=rows.filter(r=>r.ticker.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
+  document.getElementById('rowCount').textContent=rows.length+' stocks';
+
+  const tbody=document.getElementById('tblBody');
+  if(!rows.length){
+    tbody.innerHTML=`<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--txt3)">No results — ${activeFilter==='buy'?'no buy signals yet. Try scanning again.':'nothing here yet.'}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML=rows.map(r=>{
+    const isBuy=r.isBuy;
+    const sc=r.score>=7?'high':r.score>=4?'mid':'low';
+    const emaOk=r.ema9&&r.ema21?r.ema9>r.ema21:null;
+    return`<tr class="${isBuy?'buy-row':''}">
+      <td><span class="sym-cell">${r.ticker}</span></td>
+      <td class="price-cell">₹${fmt(r.ltp)}</td>
+      <td class="mono" style="color:${r.gapPct>=0?'var(--green)':'var(--red)'}">${r.gapPct>=0?'+':''}${r.gapPct}%</td>
+      <td class="mono">₹${fmt(r.vwap)}</td>
+      <td>
+        <span style="font-family:var(--mono);font-size:12px;color:${emaOk?'var(--green)':'var(--red)'}">
+          ${r.ema9??'—'} ${emaOk?'▲':'▼'} ${r.ema21??'—'}
+        </span>
+      </td>
+      <td><span class="mono" style="color:${r.adx&&r.adx>25?'var(--green)':'var(--txt2)'}">${r.adx??'—'}</span></td>
+      <td><span class="mono" style="color:${r.rsi&&r.rsi>=55&&r.rsi<=70?'var(--green)':r.rsi&&r.rsi>70?'var(--red)':'var(--txt2)'}">${r.rsi??'—'}</span></td>
+      <td><span class="mono" style="color:${r.volRatio>=2?'var(--green)':'var(--txt2)'}">${r.volRatio}×</span></td>
+      <td>
+        <div style="display:flex;gap:4px;">
+          <span class="dot ${r.conds?.condVWAP?'ok':'fail'}" title="VWAP"></span>
+          <span class="dot ${r.conds?.condEMA?'ok':'fail'}"  title="EMA"></span>
+          <span class="dot ${r.conds?.condADX?'ok':'fail'}"  title="ADX"></span>
+          <span class="dot ${r.conds?.condRSI?'ok':'fail'}"  title="RSI"></span>
+          <span class="dot ${r.conds?.condVol?'ok':'fail'}"  title="Vol"></span>
+        </div>
+      </td>
+      <td><span class="score-badge ${sc}">${r.score}</span></td>
+      <td class="mono">${r.entry?'₹'+r.entry:'—'}</td>
+      <td class="mono" style="color:var(--red)">${r.sl?'₹'+r.sl:'—'}</td>
+      <td class="mono" style="color:var(--green)">${r.target?'₹'+r.target:'—'}</td>
+      <td class="mono">${r.rr?'1:'+r.rr:'—'}</td>
+      <td>${isBuy?`<span class="buy-badge">▲ BUY</span>`:`<span class="watch-badge">◎ Watch</span>`}</td>
+    </tr>`;
+  }).join('');
+}
+
+function fmt(n){return n==null?'—':n.toLocaleString('en-IN',{maximumFractionDigits:2});}
+
+// ── Boot ──────────────────────────────────────────────────
+setInterval(updateClock,1000);
+updateClock();
+
+// Restore universe from today's localStorage
+if(loadUniverse()){
+  document.getElementById('qualifiedCount').textContent=universe.length;
+  document.getElementById('universeCount').textContent=universe.length;
+  document.getElementById('p1Badge').textContent='Restored ✓';
+  document.getElementById('p1Badge').className='phase-badge done';
+  document.getElementById('p2Badge').className='phase-badge active';
+  document.getElementById('p2Badge').textContent='Ready';
+  document.getElementById('scanBtn').disabled=marketPhase()==='closed';
+}
+</script>
+</body>
+</html>

@@ -174,6 +174,7 @@ tr.best-row td:first-child{border-left:3px solid var(--gold);}
   <a href="/backtest2.html" class="nav-link">10% Exit</a>
   <a href="/backtest3.html" class="nav-link">Custom Exit</a>
   <a href="/optimize.html"  class="nav-link active">🔬 Optimizer</a>
+  <a href="/intraday.html" class="nav-link">⚡ Intraday</a>
   <a href="/rules.html"     class="nav-link">⚙ Rules</a>
   <div class="hdr-right">
     <div class="theme-toggle">
@@ -378,6 +379,55 @@ function renderRulesBar() {
   document.getElementById('rulesBar').innerHTML = chips.join('');
 }
 
+// ── Persistence ───────────────────────
+function istDateKey() {
+  return new Date(Date.now() + 5.5*60*60*1000).toISOString().split('T')[0];
+}
+function saveState() {
+  try {
+    localStorage.setItem('gc_opt_date',      istDateKey());
+    localStorage.setItem('gc_opt_combos',    JSON.stringify(allCombos));
+    localStorage.setItem('gc_opt_processed', processed);
+    localStorage.setItem('gc_opt_tp',        JSON.stringify([...selectedTP].sort((a,b)=>a-b)));
+    localStorage.setItem('gc_opt_sl',        JSON.stringify([...selectedSL].sort((a,b)=>a-b)));
+  } catch(e) {}
+}
+function loadState() {
+  try {
+    if (localStorage.getItem('gc_opt_date') !== istDateKey()) return false;
+    const combos = JSON.parse(localStorage.getItem('gc_opt_combos') || 'null');
+    if (!combos || !Object.keys(combos).length) return false;
+    allCombos  = combos;
+    processed  = parseInt(localStorage.getItem('gc_opt_processed') || '0');
+    const tp   = JSON.parse(localStorage.getItem('gc_opt_tp') || '[]');
+    const sl   = JSON.parse(localStorage.getItem('gc_opt_sl') || '[]');
+    if (tp.length) selectedTP = new Set(tp);
+    if (sl.length) selectedSL = new Set(sl);
+    return true;
+  } catch(e) { return false; }
+}
+function showCacheBar(tp, sl) {
+  let el = document.getElementById('cacheBar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cacheBar';
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;' +
+      'font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;' +
+      'background:var(--bg2);border:1px solid var(--border);';
+    document.getElementById('results').before(el);
+  }
+  el.innerHTML = `<span>💾 Restored from today's session · TP [${tp.join(', ')}%] × SL [${sl.join(', ')}%] · ${processed} stocks</span>
+    <button onclick="clearState()" style="font-size:12px;font-weight:700;color:var(--red);cursor:pointer;background:none;border:none;">✕ Clear</button>`;
+  el.style.display = 'flex';
+}
+function clearState() {
+  ['gc_opt_date','gc_opt_combos','gc_opt_processed','gc_opt_tp','gc_opt_sl'].forEach(k => localStorage.removeItem(k));
+  allCombos = {}; processed = 0;
+  document.getElementById('results').style.display = 'none';
+  const el = document.getElementById('cacheBar');
+  if (el) el.style.display = 'none';
+}
+
 // ── Helpers ───────────────────────────
 function fmtPct(n) { return n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%'; }
 function chunk(arr, n) { const o=[]; for(let i=0;i<arr.length;i+=n) o.push(arr.slice(i,i+n)); return o; }
@@ -401,6 +451,8 @@ async function startOptimizer() {
   btn.disabled = true;
   btn.innerHTML = `<div class="spinner"></div> Running…`;
   document.getElementById('results').style.display = 'none';
+  const cb = document.getElementById('cacheBar');
+  if (cb) cb.style.display = 'none';
 
   const pw = document.getElementById('progressWrap');
   pw.classList.add('visible');
@@ -452,6 +504,7 @@ async function startOptimizer() {
           t.totalDays   += (c.avgDays || 0) * (c.hits + c.misses);
           t.closedCount += c.hits + c.misses;
         }
+        saveState();
         renderResults();
         document.getElementById('results').style.display = '';
       }
@@ -654,8 +707,18 @@ function renderTable() {
 }
 
 // ── Boot ──────────────────────────────
-buildTags();
-renderRulesBar();
+(function boot() {
+  const restored = loadState();
+  buildTags();       // reflect restored TP/SL selections in UI
+  renderRulesBar();
+  if (restored) {
+    const tp = [...selectedTP].sort((a,b)=>a-b);
+    const sl = [...selectedSL].sort((a,b)=>a-b);
+    renderResults();
+    document.getElementById('results').style.display = '';
+    showCacheBar(tp, sl);
+  }
+})();
 </script>
 </body>
 </html>
