@@ -423,11 +423,19 @@ canvas.price-chart{display:block;width:100%;height:320px;}
   </div>
 
   <div class="hdr-actions">
+    <!-- Data source status pill -->
+    <div id="srcPill" onclick="showSettings()" title="Click to configure data source"
+      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;
+             font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);
+             background:var(--bg2);white-space:nowrap;transition:all .15s">
+      <span id="srcDot" style="width:7px;height:7px;border-radius:50%;background:var(--txt3);flex-shrink:0"></span>
+      <span id="srcLabel">Checking…</span>
+    </div>
     <button class="scan-all-btn" id="scanAllBtn" onclick="startScanAll()">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span>Catch 'em All</span>
     </button>
-    <button onclick="showSettings()" title="WhatsApp alerts"
+    <button onclick="showSettings()" title="Settings"
       style="width:36px;height:36px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:grid;place-items:center;font-size:16px;">🔔</button>
     <div class="theme-toggle">
       <button class="theme-btn active" id="themeLight" onclick="setTheme('light')">☀</button>
@@ -475,7 +483,10 @@ canvas.price-chart{display:block;width:100%;height:320px;}
       <span style="font-family:var(--mono);color:var(--gold)">ANGEL_TOTP_SECRET</span> → 32-char key from Angel One app<br>
       <span style="font-size:11px;color:var(--txt3)">To get TOTP secret: Angel One app → My Profile → Login &amp; Security → Enable TOTP Authenticator → copy the 32-char key before scanning the QR code</span>
     </div>
-    <button class="btn-primary" onclick="saveAngel();toast('✅ Angel One saved')" style="margin-bottom:20px">Save Angel One</button>
+    <div style="display:flex;gap:10px;margin-bottom:20px">
+      <button class="btn-primary" onclick="saveAngel();toast('✅ Angel One saved')" style="flex:1">Save</button>
+      <button id="testSrcBtn" class="btn-ghost" onclick="testDataSource()" style="flex:0 0 auto">Test Connection</button>
+    </div>
 
     <!-- Divider -->
     <div style="height:1px;background:var(--border);margin-bottom:20px"></div>
@@ -524,12 +535,83 @@ var AO = {
   clientId: localStorage.getItem('gc_angel_client') || ''
 };
 
+// ── Data source status pill ───────────────────────
+function updateSrcPill(source) {
+  // source: 'angel' | 'yahoo' | 'testing' | null
+  var dot   = document.getElementById('srcDot');
+  var label = document.getElementById('srcLabel');
+  var pill  = document.getElementById('srcPill');
+  if (!dot || !label) return;
+
+  if (source === 'angel') {
+    dot.style.background   = 'var(--green)';
+    dot.style.boxShadow    = '0 0 0 3px var(--green-dim)';
+    label.textContent      = '⚡ Angel One';
+    label.style.color      = 'var(--green)';
+    pill.style.borderColor = 'var(--green)';
+    pill.style.background  = 'var(--green-dim)';
+  } else if (source === 'yahoo') {
+    dot.style.background   = 'var(--amber)';
+    dot.style.boxShadow    = '0 0 0 3px var(--amber-dim)';
+    label.textContent      = '📊 Yahoo (15m delay)';
+    label.style.color      = 'var(--amber)';
+    pill.style.borderColor = 'var(--amber)';
+    pill.style.background  = 'var(--amber-dim)';
+  } else if (source === 'testing') {
+    dot.style.background   = 'var(--txt3)';
+    dot.style.boxShadow    = 'none';
+    label.textContent      = 'Testing…';
+    label.style.color      = 'var(--txt3)';
+    pill.style.borderColor = 'var(--border)';
+    pill.style.background  = 'var(--bg2)';
+  } else {
+    dot.style.background   = 'var(--txt3)';
+    dot.style.boxShadow    = 'none';
+    label.textContent      = AO.apiKey ? 'Angel One' : 'Yahoo Finance';
+    label.style.color      = 'var(--txt3)';
+    pill.style.borderColor = 'var(--border)';
+    pill.style.background  = 'var(--bg2)';
+  }
+}
+
+async function testDataSource() {
+  updateSrcPill('testing');
+  var btn = document.getElementById('testSrcBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
+  try {
+    var qs = '?symbol=RELIANCE';
+    if (AO.apiKey)   qs += '&angelKey='    + encodeURIComponent(AO.apiKey);
+    if (AO.clientId) qs += '&angelClient=' + encodeURIComponent(AO.clientId);
+    var resp = await fetch('/api/data' + qs);
+    var json = await resp.json();
+    if (json.ok) {
+      var src = json.source || 'yahoo';
+      updateSrcPill(src);
+      _currentDataSource = src === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
+      toast(src === 'angel' ? '✅ Angel One connected — real-time data active' : '⚠ Using Yahoo Finance — check Angel credentials');
+      if (btn) {
+        btn.textContent = src === 'angel' ? '✅ Angel One active' : '⚠ Fell back to Yahoo';
+        btn.style.color = src === 'angel' ? 'var(--green)' : 'var(--amber)';
+      }
+    } else {
+      updateSrcPill('yahoo');
+      toast('⚠ ' + (json.error || 'Test failed — using Yahoo fallback'));
+      if (btn) { btn.textContent = '⚠ Test failed'; btn.style.color = 'var(--red)'; }
+    }
+  } catch(e) {
+    updateSrcPill(null);
+    toast('Error: ' + e.message);
+  }
+  if (btn) { setTimeout(function(){ btn.disabled=false; btn.textContent='Test Connection'; btn.style.color=''; }, 3000); }
+}
+
 function saveAngel() {
   AO.apiKey   = document.getElementById('aKey').value.trim();
   AO.clientId = document.getElementById('aClient').value.trim();
   localStorage.setItem('gc_angel_key',    AO.apiKey);
   localStorage.setItem('gc_angel_client', AO.clientId);
   renderAngelStatus();
+  updateSrcPill(AO.apiKey ? null : 'yahoo'); // reset pill; re-test to confirm
 }
 
 function renderAngelStatus() {
@@ -943,7 +1025,9 @@ async function analyzeStock(sym) {
     var resp = await fetch('/api/data'+qs);
     var json = await resp.json();
     if(!json.ok) throw new Error(json.error||'Failed to fetch');
-    _currentDataSource = json.source === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
+    var src = json.source || 'yahoo';
+    _currentDataSource = src === 'angel' ? '⚡ Angel One (real-time)' : '📊 Yahoo Finance (15-min delay)';
+    updateSrcPill(src);
 
     var candles = json.candles;
     if(candles.length < 201) throw new Error('Not enough history (need 200+ days). Try a more liquid stock.');
@@ -1383,6 +1467,10 @@ setTheme = function(t) {
 };
 
 // ── Boot: auto-load cache on page open ───────────
+// Test data source silently in background on load
+updateSrcPill(AO.apiKey ? null : 'yahoo');
+if (AO.apiKey && AO.clientId) testDataSource();
+
 (async function() {
   // 1. Try localStorage first (instant — no network)
   var local = loadFromLocalCache();
