@@ -1056,6 +1056,51 @@ function renderSignal(sym, name, candles, closes, dates, sma50, sma200, crosses)
 var _scanResults = {};
 var _scanFilter  = 'golden';
 var _nseStocks   = null; // cached full NSE list
+var _cacheDate   = null; // IST date string of cached results
+var _cacheSource = null; // 'local' | 'mongo' | 'fresh'
+
+// ── Cache helpers ─────────────────────────────────
+function istDateKey() {
+  var ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().split('T')[0]; // YYYY-MM-DD
+}
+
+function saveToLocalCache(results) {
+  var today = istDateKey();
+  try {
+    localStorage.setItem('gc_cache_date',    today);
+    localStorage.setItem('gc_cache_results', JSON.stringify(results));
+  } catch(e) {} // quota exceeded — skip silently
+}
+
+function loadFromLocalCache() {
+  var today   = istDateKey();
+  var date    = localStorage.getItem('gc_cache_date');
+  var raw     = localStorage.getItem('gc_cache_results');
+  if (date === today && raw) {
+    try { return JSON.parse(raw); } catch(e) {}
+  }
+  return null;
+}
+
+async function saveToMongoCache(results) {
+  try {
+    await fetch('/api/cache', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ results })
+    });
+  } catch(e) {} // silent — local cache still works
+}
+
+async function loadFromMongoCache() {
+  try {
+    var resp = await fetch('/api/cache');
+    var json = await resp.json();
+    if (json.ok && json.cached && json.results) return json;
+  } catch(e) {}
+  return null;
+}
 
 async function loadNseStocks() {
   if (_nseStocks) return _nseStocks;
@@ -1077,12 +1122,46 @@ async function loadNseStocks() {
   return NSE_STOCKS.map(function(r){ return { ticker: r[0], name: r[1] }; });
 }
 
-async function startScanAll() {
+async function startScanAll(forceRefresh) {
   var btn = document.getElementById('scanAllBtn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0;border-top-color:#fff"></div>';
 
-  // Step 1 — Load full NSE stock list
+  // ── Step 1: Check local cache (instant) ──────────
+  if (!forceRefresh) {
+    var local = loadFromLocalCache();
+    if (local) {
+      _scanResults  = local;
+      _cacheSource  = 'local';
+      _cacheDate    = istDateKey();
+      renderScanResults();
+      btn.disabled  = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
+      return;
+    }
+  }
+
+  // ── Step 2: Check MongoDB cache ──────────────────
+  if (!forceRefresh) {
+    document.getElementById('main').innerHTML =
+      '<div class="spinner-wrap"><div class="spinner"></div>'
+      +'<div class="spin-txt">Checking today\'s cache…</div></div>';
+    var mongo = await loadFromMongoCache();
+    if (mongo) {
+      _scanResults = mongo.results;
+      _cacheSource = 'mongo';
+      _cacheDate   = mongo.date;
+      saveToLocalCache(_scanResults); // warm local cache
+      renderScanResults();
+      btn.disabled  = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
+      return;
+    }
+  }
+
+  // ── Step 3: Full live scan ───────────────────────
+  _cacheSource = 'fresh';
+
   document.getElementById('main').innerHTML =
     '<div class="spinner-wrap"><div class="spinner"></div>'
     +'<div class="spin-txt">Loading NSE stock universe…</div></div>';
@@ -1090,7 +1169,6 @@ async function startScanAll() {
   var stocks = await loadNseStocks();
   var symbols = stocks.map(function(s){ return s.ticker || s[0]; });
 
-  // Step 2 — Scan in batches of 25 with live progress
   _scanResults = {};
   var total     = symbols.length;
   var batchSize = 25;
@@ -1178,6 +1256,11 @@ async function startScanAll() {
     sendNotify(alertMsg);
   }
 
+  // ── Save to both caches ──────────────────────────
+  _cacheDate = istDateKey();
+  saveToLocalCache(_scanResults);       // instant, browser-local
+  saveToMongoCache(_scanResults);       // async, cross-device
+
   renderScanResults();
 
   btn.disabled = false;
@@ -1198,8 +1281,36 @@ function renderScanResults() {
 
   var fmt=function(n){return Number(n).toLocaleString('en-IN',{maximumFractionDigits:2});};
 
+  // Cache status banner
+  var cacheBanner = '';
+  if (_cacheSource === 'local') {
+    cacheBanner = '<div style="display:flex;align-items:center;justify-content:space-between;'
+      +'padding:10px 16px;background:var(--blue-dim);border-radius:var(--r);margin-bottom:14px;gap:12px">'
+      +'<div style="font-size:13px;color:var(--blue)">'
+        +'💾 Loaded from local cache · <span style="font-family:var(--mono)">'+_cacheDate+'</span>'
+      +'</div>'
+      +'<button onclick="startScanAll(true)" style="font-size:12px;font-weight:700;color:var(--blue);'
+        +'background:transparent;border:1px solid var(--blue);border-radius:999px;padding:4px 12px;cursor:pointer">↺ Refresh</button>'
+    +'</div>';
+  } else if (_cacheSource === 'mongo') {
+    cacheBanner = '<div style="display:flex;align-items:center;justify-content:space-between;'
+      +'padding:10px 16px;background:var(--green-dim);border-radius:var(--r);margin-bottom:14px;gap:12px">'
+      +'<div style="font-size:13px;color:var(--green)">'
+        +'☁ Loaded from MongoDB cache · <span style="font-family:var(--mono)">'+_cacheDate+'</span>'
+      +'</div>'
+      +'<button onclick="startScanAll(true)" style="font-size:12px;font-weight:700;color:var(--green);'
+        +'background:transparent;border:1px solid var(--green);border-radius:999px;padding:4px 12px;cursor:pointer">↺ Refresh</button>'
+    +'</div>';
+  } else if (_cacheSource === 'fresh') {
+    cacheBanner = '<div style="padding:10px 16px;background:var(--gold-dim);border-radius:var(--r);'
+      +'font-size:13px;color:var(--gold);margin-bottom:14px">'
+      +'⚡ Fresh scan · <span style="font-family:var(--mono)">'+_cacheDate+'</span> · saved to cache'
+    +'</div>';
+  }
+
   var html =
     '<div class="scanner-section">'
+      +cacheBanner
       +'<div class="section-hdr">'
         +'<div>'
           +'<div class="section-title">Scan Results</div>'
@@ -1270,6 +1381,29 @@ setTheme = function(t) {
     });
   }
 };
+
+// ── Boot: auto-load cache on page open ───────────
+(async function() {
+  // 1. Try localStorage first (instant — no network)
+  var local = loadFromLocalCache();
+  if (local) {
+    _scanResults = local;
+    _cacheSource = 'local';
+    _cacheDate   = istDateKey();
+    renderScanResults();
+    return;
+  }
+  // 2. Try MongoDB cache (works across devices / after clearing browser data)
+  var mongo = await loadFromMongoCache();
+  if (mongo) {
+    _scanResults = mongo.results;
+    _cacheSource = 'mongo';
+    _cacheDate   = mongo.date;
+    saveToLocalCache(_scanResults); // warm local cache for next time
+    renderScanResults();
+  }
+  // 3. Nothing cached — splash screen stays, user clicks "Catch 'em All"
+})();
 </script>
 </body>
 </html>
