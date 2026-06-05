@@ -122,26 +122,62 @@ async function angelAuth(apiKey, clientId) {
   throw new Error(`${errMsg}${errCode ? ' ('+errCode+')' : ''}\n\nFull response from Angel One:\n${rawJson}`);
 }
 
+// ── Angel One instruments master (token lookup) ─────────────
+// Cached in memory — fetched once per serverless warm instance
+let _angelTokenMap = null;
+
+async function loadAngelTokenMap() {
+  if (_angelTokenMap) return _angelTokenMap;
+
+  // Angel One publishes a complete NSE instruments file
+  const url = 'https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json';
+  const data = await new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const req = https.request({
+      hostname: u.hostname, path: u.pathname,
+      method: 'GET',
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    }, res => {
+      let raw = '';
+      res.on('data', c => (raw += c));
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve([]); } });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+
+  // Build NSE symbol → token map
+  // Instrument entries look like: { token:"2885", symbol:"RELIANCE-EQ", exch_seg:"NSE", ... }
+  const map = {};
+  for (const inst of data) {
+    if (inst.exch_seg !== 'NSE') continue;
+    // symbol is like "RELIANCE-EQ" — strip the "-EQ" suffix to get the plain ticker
+    const ticker = (inst.symbol || '').replace(/-EQ$/i, '').trim().toUpperCase();
+    if (ticker && inst.token) map[ticker] = inst.token;
+    // Also store the full symbol name (e.g. "RELIANCE-EQ") as a key
+    const full = (inst.symbol || '').trim().toUpperCase();
+    if (full && inst.token) map[full] = inst.token;
+  }
+  _angelTokenMap = map;
+  return map;
+}
+
+async function getAngelToken(sym) {
+  const map = await loadAngelTokenMap();
+  // Try plain symbol first, then with -EQ suffix
+  return map[sym.toUpperCase()]
+      || map[sym.toUpperCase() + '-EQ']
+      || null;
+}
+
 // ── Angel One historical data ──────────────────────────────
 async function fetchAngelCandles(sym, apiKey, clientId) {
   const jwt = await angelAuth(apiKey, clientId);
 
-  // Angel One uses numeric instrument tokens — map common NSE symbols
-  // Use the smart-search endpoint to get token
-  const searchRes = await httpsPost('apiconnect.angelbroking.com', '/rest/secure/angelbroking/order/v1/searchScrip', {
-    exchange: 'NSE', searchscrip: sym
-  }, {
-    'Authorization': `Bearer ${jwt}`,
-    'X-PrivateKey': apiKey,
-    'X-UserType': 'USER',
-    'X-SourceID': 'WEB',
-    'X-ClientLocalIP': '127.0.0.1',
-    'X-ClientPublicIP': '127.0.0.1',
-    'X-MACAddress': '00:00:00:00:00:00'
-  });
-
-  const scrip = searchRes?.data?.find(s => s.tradingsymbol === sym && s.instrumenttype === 'AMXIDX' || s.tradingsymbol === sym);
-  if (!scrip) throw new Error(`Token not found for ${sym}`);
+  // Look up instrument token from Angel One's master file
+  // Angel One symbol format: "RELIANCE-EQ", token: "2885"
+  const token = await getAngelToken(sym);
+  if (!token) throw new Error(`Symbol ${sym} not found in Angel One instruments. Try the exact NSE ticker (e.g. RELIANCE, not RELIANCE.NS).`);
 
   const to   = new Date();
   const from = new Date(Date.now() - 400 * 86400000);
@@ -149,7 +185,7 @@ async function fetchAngelCandles(sym, apiKey, clientId) {
 
   const hist = await httpsPost('apiconnect.angelbroking.com', '/rest/secure/angelbroking/historical/v1/getCandleData', {
     exchange: 'NSE',
-    symboltoken: scrip.symboltoken,
+    symboltoken: token,
     interval: 'ONE_DAY',
     fromdate: fmt(from),
     todate:   fmt(to)
