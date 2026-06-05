@@ -1,9 +1,10 @@
 {
   "rewrites": [
-    { "source": "/api/data",   "destination": "/api/data.js"   },
-    { "source": "/api/scan",   "destination": "/api/scan.js"   },
-    { "source": "/api/notify", "destination": "/api/notify.js" },
-    { "source": "/api/stocks", "destination": "/api/stocks.js" },
-    { "source": "/api/cache",  "destination": "/api/cache.js"  }
+    { "source": "/api/data",     "destination": "/api/data.js"     },
+    { "source": "/api/scan",     "destination": "/api/scan.js"     },
+    { "source": "/api/notify",   "destination": "/api/notify.js"   },
+    { "source": "/api/stocks",   "destination": "/api/stocks.js"   },
+    { "source": "/api/cache",    "destination": "/api/cache.js"    },
+    { "source": "/api/backtest", "destination": "/api/backtest.js" }
   ]
 }

@@ -310,6 +310,76 @@ canvas.price-chart{display:block;width:100%;height:320px;}
 .twilio-status.ok{background:var(--green-dim);color:var(--green);}
 .twilio-status.warn{background:var(--gold-dim);color:var(--gold);}
 
+/* ── Backtest page ──────────────────────────────── */
+.bt-page{padding:0 0 60px;}
+.bt-back{
+  display:flex;align-items:center;gap:8px;padding:16px 20px;
+  font-size:14px;color:var(--txt2);cursor:pointer;
+  border-bottom:1px solid var(--border);
+}
+.bt-back:hover{color:var(--txt);}
+
+.bt-summary{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:1px;background:var(--border);
+  border-bottom:1px solid var(--border);
+}
+.bt-stat{
+  background:var(--bg2);padding:22px 24px;
+}
+.bt-stat-lbl{font-size:11px;font-weight:600;color:var(--txt3);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.bt-stat-val{font-size:26px;font-weight:800;letter-spacing:-0.03em;
+  font-family:var(--mono);}
+.bt-stat-sub{font-size:12px;color:var(--txt3);margin-top:4px;font-family:var(--mono);}
+
+.bt-hero{
+  padding:24px 28px;background:var(--bg2);border-bottom:1px solid var(--border);
+}
+.bt-hero-lbl{font-size:11px;font-weight:600;color:var(--txt3);
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;}
+.bt-hero-val{font-size:44px;font-weight:800;letter-spacing:-0.04em;font-family:var(--mono);}
+.bt-hero-sub{font-size:14px;margin-top:6px;}
+
+.bt-filters{
+  display:flex;align-items:center;gap:8px;padding:14px 20px;
+  border-bottom:1px solid var(--border);flex-wrap:wrap;
+}
+.bt-sort-lbl{font-size:12px;color:var(--txt3);margin-right:4px;}
+
+.bt-table{width:100%;border-collapse:collapse;}
+.bt-th{
+  padding:10px 16px;text-align:left;font-size:11px;font-weight:600;
+  color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  white-space:nowrap;cursor:pointer;user-select:none;
+}
+.bt-th:hover{color:var(--txt);}
+.bt-th.sorted{color:var(--gold);}
+.bt-tr{border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;}
+.bt-tr:hover{background:var(--bg2);}
+.bt-td{padding:13px 16px;font-size:13.5px;vertical-align:middle;}
+.bt-td.mono{font-family:var(--mono);}
+.bt-ticker{font-weight:700;font-size:14px;}
+.bt-name{font-size:11.5px;color:var(--txt3);margin-top:2px;}
+.bt-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 9px;border-radius:999px;
+  font-size:11px;font-weight:700;
+}
+.bt-badge.hit{background:var(--green-dim);color:var(--green);}
+.bt-badge.miss{background:var(--red-dim);color:var(--red);}
+
+@media(max-width:640px){
+  .bt-summary{grid-template-columns:1fr 1fr;}
+  .bt-stat-val{font-size:20px;}
+  .bt-hero-val{font-size:32px;}
+  .bt-th:nth-child(4),.bt-td:nth-child(4){display:none;}
+  .bt-th:nth-child(5),.bt-td:nth-child(5){display:none;}
+  .bt-td{padding:10px 12px;}
+  .bt-th{padding:8px 12px;}
+}
+
 /* ── Scrollbar ──────────────────────────────────── */
 ::-webkit-scrollbar{width:8px;height:8px;}
 ::-webkit-scrollbar-track{background:transparent;}
@@ -1480,6 +1550,12 @@ function renderScanResults() {
           +'<div class="section-sub">'+all.length+' stocks analysed · '
             +golden.length+' Golden Cross · '+death.length+' Death Cross</div>'
         +'</div>'
+        +'<button onclick="showBacktest()" '
+          +'style="display:flex;align-items:center;gap:7px;padding:9px 18px;border-radius:999px;'
+          +'background:var(--gold);color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer;'
+          +'transition:opacity .15s" onmouseover="this.style.opacity=\'.85\'" onmouseout="this.style.opacity=\'1\'">'
+          +'📈 Backtest'
+        +'</button>'
       +'</div>'
 
       +'<div class="filter-row">'
