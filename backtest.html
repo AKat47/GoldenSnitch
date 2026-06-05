@@ -302,6 +302,11 @@ tr:hover td{background:var(--bg2);}
     </table>
   </div>
 
+  <!-- Cache banner -->
+  <div id="cacheBanner" style="display:none;margin-bottom:20px;padding:10px 16px;border-radius:10px;
+    display:none;align-items:center;justify-content:space-between;gap:12px;font-size:13px;">
+  </div>
+
   <!-- Idle state -->
   <div class="idle-state" id="idleState">
     <div class="idle-icon">📊</div>
@@ -312,12 +317,18 @@ tr:hover td{background:var(--bg2);}
 
 <script>
 // ── State ────────────────────────────────────────────
-let allResults = [];
+let allResults   = [];
 let activeFilter = 'all';
-let sortKey = 'pnl_desc';
-let running = false;
+let sortKey      = 'pnl_desc';
+let running      = false;
+let cacheSource  = null; // 'local' | 'mongo' | 'fresh'
+let cacheDate    = null;
 
-// ── Theme ────────────────────────────────────────────
+const LS_DATE    = 'gc_bt1_date';
+const LS_RESULTS = 'gc_bt1_results';
+const CACHE_TYPE = 'backtest';
+
+// ── Theme ─────────────────────────────────────────────
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('gc_theme', t);
@@ -326,102 +337,186 @@ function applyTheme(t) {
 document.querySelectorAll('.theme-btn').forEach(b => b.onclick = () => applyTheme(b.dataset.t));
 applyTheme(localStorage.getItem('gc_theme') || 'light');
 
-// ── Helpers ──────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────
+function istDateKey() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().split('T')[0];
+}
 function fmt(n) { return n == null ? '—' : n.toLocaleString('en-IN', {maximumFractionDigits:2}); }
 function fmtPct(n) { return (n >= 0 ? '+' : '') + n.toFixed(2) + '%'; }
 function fmtDate(d) {
   if (!d) return '—';
   const [y, m, day] = d.split('-');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${+day} ${months[+m-1]} ${y}`;
+  return `${+day} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]} ${y}`;
 }
-
-// ── Fetch stock list ─────────────────────────────────
-async function fetchStockList() {
-  const r = await fetch('/api/stocks');
-  const j = await r.json();
-  if (!j.ok) throw new Error('Could not load stock list');
-  return j.stocks; // [{ticker, name}]
-}
-
-// ── Chunk array ──────────────────────────────────────
 function chunk(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
 }
 
-// ── Main backtest runner ─────────────────────────────
+// ── Cache helpers ─────────────────────────────────────
+function saveToLocalCache(results) {
+  try {
+    localStorage.setItem(LS_DATE,    istDateKey());
+    localStorage.setItem(LS_RESULTS, JSON.stringify(results));
+  } catch(e) {}
+}
+function loadFromLocalCache() {
+  try {
+    const date = localStorage.getItem(LS_DATE);
+    const raw  = localStorage.getItem(LS_RESULTS);
+    if (date === istDateKey() && raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+async function saveToMongoCache(results) {
+  try {
+    await fetch(`/api/cache?type=${CACHE_TYPE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results })
+    });
+  } catch(e) {}
+}
+async function loadFromMongoCache() {
+  try {
+    const resp = await fetch(`/api/cache?type=${CACHE_TYPE}`);
+    const j    = await resp.json();
+    if (j.ok && j.cached && Array.isArray(j.results)) return j;
+  } catch(e) {}
+  return null;
+}
+
+// ── Cache banner ──────────────────────────────────────
+function showCacheBanner(source, date) {
+  const el = document.getElementById('cacheBanner');
+  if (source === 'local') {
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);';
+    el.innerHTML = `<span>💾 Loaded from local cache · <span style="font-family:var(--mono)">${date}</span></span>
+      <button onclick="startBacktest()" style="font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;background:none;border:none;">↻ Refresh</button>`;
+  } else if (source === 'mongo') {
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;background:var(--green-dim);border:1px solid var(--green);';
+    el.innerHTML = `<span>☁ Loaded from MongoDB · <span style="font-family:var(--mono)">${date}</span> · results shared across all users</span>
+      <button onclick="startBacktest()" style="font-size:12px;font-weight:700;color:var(--green);cursor:pointer;background:none;border:none;">↻ Refresh</button>`;
+  } else if (source === 'fresh') {
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;background:var(--gold-dim);border:1px solid var(--gold);';
+    el.innerHTML = `<span>⚡ Fresh backtest · <span style="font-family:var(--mono)">${date}</span> · saved to cache</span>`;
+  }
+}
+
+// ── Show results ──────────────────────────────────────
+function showResults(results) {
+  allResults = results;
+  updateSummary(results);
+  renderTable();
+  document.getElementById('idleState').style.display   = 'none';
+  document.getElementById('summaryGrid').style.display = '';
+  document.getElementById('toolbar').style.display     = '';
+  document.getElementById('tblWrap').style.display     = '';
+}
+
+// ── Boot: try cache first ─────────────────────────────
+(async function boot() {
+  // 1. localStorage (instant)
+  const local = loadFromLocalCache();
+  if (local && local.length) {
+    cacheSource = 'local';
+    cacheDate   = istDateKey();
+    showResults(local);
+    showCacheBanner('local', cacheDate);
+    return;
+  }
+  // 2. MongoDB
+  const mongo = await loadFromMongoCache();
+  if (mongo && mongo.results && mongo.results.length) {
+    cacheSource = 'mongo';
+    cacheDate   = mongo.date;
+    saveToLocalCache(mongo.results); // warm local for next visit
+    showResults(mongo.results);
+    showCacheBanner('mongo', cacheDate);
+  }
+})();
+
+// ── Fetch stock list ──────────────────────────────────
+async function fetchStockList() {
+  const r = await fetch('/api/stocks');
+  const j = await r.json();
+  if (!j.ok) throw new Error('Could not load stock list');
+  return j.stocks;
+}
+
+// ── Main backtest runner ──────────────────────────────
 async function startBacktest() {
   if (running) return;
-  running = true;
+  running    = true;
   allResults = [];
 
   const btn = document.getElementById('runBtn');
   btn.disabled = true;
   btn.innerHTML = `<div class="spinner"></div> Running…`;
 
-  document.getElementById('idleState').style.display = 'none';
+  document.getElementById('idleState').style.display   = 'none';
   document.getElementById('summaryGrid').style.display = 'none';
-  document.getElementById('toolbar').style.display = 'none';
-  document.getElementById('tblWrap').style.display = 'none';
+  document.getElementById('toolbar').style.display     = 'none';
+  document.getElementById('tblWrap').style.display     = 'none';
+  document.getElementById('cacheBanner').style.display = 'none';
 
   const pw = document.getElementById('progressWrap');
   pw.classList.add('visible');
   setProgress(0, 'Loading NSE stock list…', '');
 
   let stocks;
-  try {
-    stocks = await fetchStockList();
-  } catch(e) {
-    alert('Failed to load stock list: ' + e.message);
-    resetBtn(); return;
-  }
+  try { stocks = await fetchStockList(); }
+  catch(e) { alert('Failed to load stock list: ' + e.message); resetBtn(); return; }
 
   const symbols = stocks.map(s => s.ticker);
-  const batches = chunk(symbols, 50); // 50 symbols per API call
+  const batches = chunk(symbols, 50);
   let done = 0;
 
   setProgress(2, `Scanning ${symbols.length} stocks in ${batches.length} batches…`, `0 / ${symbols.length} processed`);
 
   for (let b = 0; b < batches.length; b++) {
-    const batch = batches[b];
     try {
       const resp = await fetch('/api/backtest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: batch })
+        body: JSON.stringify({ symbols: batches[b] })
       });
       const j = await resp.json();
       if (j.ok && j.results) {
         allResults.push(...j.results);
-        // Live update summary as we go
         updateSummary(allResults);
         renderTable();
         if (allResults.length > 0) {
           document.getElementById('summaryGrid').style.display = '';
-          document.getElementById('toolbar').style.display = '';
-          document.getElementById('tblWrap').style.display = '';
+          document.getElementById('toolbar').style.display     = '';
+          document.getElementById('tblWrap').style.display     = '';
         }
       }
-    } catch(e) { /* skip failed batch */ }
+    } catch(e) {}
 
-    done += batch.length;
+    done += batches[b].length;
     const pct = Math.round(done / symbols.length * 100);
-    setProgress(pct, `Scanning stocks… (batch ${b+1}/${batches.length})`,
-      `${done} / ${symbols.length} symbols processed · ${allResults.length} crosses found`);
+    setProgress(pct, `Scanning… (batch ${b+1}/${batches.length})`,
+      `${done} / ${symbols.length} processed · ${allResults.length} crosses found`);
   }
 
-  // Final state
-  setProgress(100, 'Backtest complete!', `${allResults.length} golden crosses found across ${symbols.length} stocks`);
-  setTimeout(() => { pw.classList.remove('visible'); }, 3000);
+  setProgress(100, 'Backtest complete!', `${allResults.length} golden crosses found`);
+  setTimeout(() => pw.classList.remove('visible'), 3000);
 
+  // Save to caches
+  cacheSource = 'fresh';
+  cacheDate   = istDateKey();
+  saveToLocalCache(allResults);
+  saveToMongoCache(allResults); // async, fire-and-forget
+
+  showCacheBanner('fresh', cacheDate);
   updateSummary(allResults);
   renderTable();
   document.getElementById('summaryGrid').style.display = '';
-  document.getElementById('toolbar').style.display = '';
-  document.getElementById('tblWrap').style.display = '';
-
+  document.getElementById('toolbar').style.display     = '';
+  document.getElementById('tblWrap').style.display     = '';
   resetBtn();
 }
 
@@ -433,13 +528,13 @@ function resetBtn() {
 }
 
 function setProgress(pct, label, status) {
-  document.getElementById('progressFill').style.width = pct + '%';
-  document.getElementById('progressPct').textContent = pct + '%';
-  document.getElementById('progressLabel').textContent = label;
+  document.getElementById('progressFill').style.width   = pct + '%';
+  document.getElementById('progressPct').textContent    = pct + '%';
+  document.getElementById('progressLabel').textContent  = label;
   document.getElementById('progressStatus').textContent = status;
 }
 
-// ── Summary cards ────────────────────────────────────
+// ── Summary cards ─────────────────────────────────────
 function updateSummary(results) {
   if (!results.length) return;
   const hits   = results.filter(r => r.hit);
@@ -448,19 +543,19 @@ function updateSummary(results) {
   const best   = results.reduce((a, b) => b.pnlPct > a.pnlPct ? b : a);
   const worst  = results.reduce((a, b) => b.pnlPct < a.pnlPct ? b : a);
 
-  document.getElementById('cTotal').textContent   = results.length;
-  document.getElementById('cHits').textContent    = hits.length;
-  document.getElementById('cMisses').textContent  = misses.length;
-  document.getElementById('cHitRate').textContent = `${(hits.length/results.length*100).toFixed(1)}% success rate`;
+  document.getElementById('cTotal').textContent    = results.length;
+  document.getElementById('cHits').textContent     = hits.length;
+  document.getElementById('cMisses').textContent   = misses.length;
+  document.getElementById('cHitRate').textContent  = `${(hits.length/results.length*100).toFixed(1)}% success rate`;
 
   const avgEl = document.getElementById('cAvg');
   avgEl.textContent = fmtPct(avgPnl);
   avgEl.style.color = avgPnl >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('cAvgCard').className = 'card ' + (avgPnl >= 0 ? 'green' : 'red');
 
-  document.getElementById('cBest').textContent    = best.symbol;
-  document.getElementById('cBestSub').textContent = fmtPct(best.pnlPct);
-  document.getElementById('cWorst').textContent   = worst.symbol;
+  document.getElementById('cBest').textContent     = best.symbol;
+  document.getElementById('cBestSub').textContent  = fmtPct(best.pnlPct);
+  document.getElementById('cWorst').textContent    = worst.symbol;
   document.getElementById('cWorstSub').textContent = fmtPct(worst.pnlPct);
 }
 
@@ -487,16 +582,15 @@ function cycleSort(key) {
 }
 
 function getFiltered() {
-  const q = (document.getElementById('searchBox')?.value || '').toLowerCase();
+  const q  = (document.getElementById('searchBox')?.value || '').toLowerCase();
+  const sk = document.getElementById('sortSelect')?.value || sortKey;
   let rows = allResults.filter(r => {
-    if (activeFilter === 'hits'   && !r.hit)          return false;
-    if (activeFilter === 'misses' && r.hit)            return false;
+    if (activeFilter === 'hits'   && !r.hit)           return false;
+    if (activeFilter === 'misses' &&  r.hit)           return false;
     if (activeFilter === 'golden' && !r.isStillGolden) return false;
     if (q && !r.symbol.toLowerCase().includes(q) && !r.name.toLowerCase().includes(q)) return false;
     return true;
   });
-
-  const sk = document.getElementById('sortSelect')?.value || sortKey;
   rows.sort((a, b) => {
     switch(sk) {
       case 'pnl_desc':   return b.pnlPct - a.pnlPct;
@@ -516,10 +610,9 @@ function getFiltered() {
 }
 
 function renderTable() {
-  const rows = getFiltered();
+  const rows  = getFiltered();
   const tbody = document.getElementById('tblBody');
   document.getElementById('resultCount').textContent = `${rows.length} stocks`;
-
   tbody.innerHTML = rows.slice(0, 500).map(r => {
     const posClass = r.hit ? 'pos' : 'neg';
     const sign     = r.hit ? '▲' : '▼';
@@ -537,8 +630,7 @@ function renderTable() {
       </td>
     </tr>`;
   }).join('');
-
-  if (rows.length === 0) {
+  if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--txt3)">No results match your filter</td></tr>`;
   }
 }

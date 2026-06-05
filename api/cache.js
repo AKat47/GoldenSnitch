@@ -1,6 +1,12 @@
-// api/cache.js — Daily golden cross results cache in MongoDB
-// GET  /api/cache          → returns today's cached results (IST date)
-// POST /api/cache          → saves results for today
+// api/cache.js — Daily results cache in MongoDB
+//
+// Supports three cache types via ?type= query param:
+//   (default)   → scan_cache        (golden cross scanner, keyed by IST date)
+//   backtest    → backtest_cache     (hold-till-now backtest, keyed by IST date)
+//   backtest2   → backtest2_cache    (10% TP/SL backtest, keyed by IST date)
+//
+// GET  /api/cache[?type=backtest]  → returns today's cached results
+// POST /api/cache[?type=backtest]  → saves results for today
 //
 // Required env var: MONGODB_URI
 
@@ -16,10 +22,11 @@ async function getDb() {
 }
 
 function istDateKey() {
-  // Returns YYYY-MM-DD in IST
   const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
   return ist.toISOString().split('T')[0];
 }
+
+const ALLOWED_TYPES = { '': 'scan_cache', 'backtest': 'backtest_cache', 'backtest2': 'backtest2_cache' };
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -31,9 +38,15 @@ module.exports = async (req, res) => {
     return res.status(200).json({ ok: false, error: 'MONGODB_URI not set' });
   }
 
+  const type = (req.query?.type || '').trim().toLowerCase();
+  const colName = ALLOWED_TYPES[type];
+  if (!colName) {
+    return res.status(400).json({ ok: false, error: `Unknown cache type: ${type}` });
+  }
+
   try {
-    const db  = await getDb();
-    const col = db.collection('scan_cache');
+    const db    = await getDb();
+    const col   = db.collection(colName);
     const today = istDateKey();
 
     // ── GET: return today's cache ───────────────────
@@ -42,10 +55,10 @@ module.exports = async (req, res) => {
       if (!doc) return res.status(200).json({ ok: true, cached: false });
       return res.status(200).json({
         ok: true,
-        cached: true,
-        date: today,
+        cached:  true,
+        date:    today,
         results: doc.results,
-        count: doc.count,
+        count:   doc.count,
         savedAt: doc.savedAt
       });
     }
@@ -56,13 +69,11 @@ module.exports = async (req, res) => {
       const results = body?.results;
       if (!results) return res.status(400).json({ ok: false, error: 'Missing results' });
 
+      const count = Array.isArray(results) ? results.length : Object.keys(results).length;
+
       await col.updateOne(
         { _id: today },
-        { $set: {
-            results,
-            count:   Object.keys(results).length,
-            savedAt: new Date()
-        }},
+        { $set: { results, count, savedAt: new Date() } },
         { upsert: true }
       );
 
@@ -70,7 +81,7 @@ module.exports = async (req, res) => {
       await col.createIndex({ savedAt: 1 }, { expireAfterSeconds: 3 * 86400, background: true })
         .catch(() => {});
 
-      return res.status(200).json({ ok: true, saved: true, date: today });
+      return res.status(200).json({ ok: true, saved: true, date: today, count });
     }
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' });

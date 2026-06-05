@@ -313,6 +313,9 @@ tr:hover td{background:var(--bg2);}
     </table>
   </div>
 
+  <!-- Cache banner -->
+  <div id="cacheBanner" style="display:none"></div>
+
   <!-- Idle -->
   <div class="idle-state" id="idleState">
     <div class="idle-icon">🎯</div>
@@ -323,9 +326,15 @@ tr:hover td{background:var(--bg2);}
 
 <script>
 // ── State ────────────────────────────
-let allResults  = [];
+let allResults   = [];
 let activeFilter = 'all';
-let running = false;
+let running      = false;
+let cacheSource  = null;
+let cacheDate    = null;
+
+const LS_DATE    = 'gc_bt2_date';
+const LS_RESULTS = 'gc_bt2_results';
+const CACHE_TYPE = 'backtest2';
 
 // ── Theme ────────────────────────────
 function applyTheme(t) {
@@ -337,6 +346,10 @@ document.querySelectorAll('.theme-btn').forEach(b => b.onclick = () => applyThem
 applyTheme(localStorage.getItem('gc_theme') || 'light');
 
 // ── Helpers ──────────────────────────
+function istDateKey() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().split('T')[0];
+}
 function fmt(n)    { return n == null ? '—' : n.toLocaleString('en-IN', {maximumFractionDigits:2}); }
 function fmtD(d)   {
   if (!d) return '—';
@@ -344,11 +357,60 @@ function fmtD(d)   {
   return `${+day} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]} ${y}`;
 }
 function fmtPct(n) { return n == null ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%'; }
-
 function chunk(arr, n) {
   const out = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i+n));
   return out;
+}
+
+// ── Cache helpers ─────────────────────
+function saveToLocalCache(results) {
+  try {
+    localStorage.setItem(LS_DATE,    istDateKey());
+    localStorage.setItem(LS_RESULTS, JSON.stringify(results));
+  } catch(e) {}
+}
+function loadFromLocalCache() {
+  try {
+    const date = localStorage.getItem(LS_DATE);
+    const raw  = localStorage.getItem(LS_RESULTS);
+    if (date === istDateKey() && raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+async function saveToMongoCache(results) {
+  try {
+    await fetch(`/api/cache?type=${CACHE_TYPE}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ results })
+    });
+  } catch(e) {}
+}
+async function loadFromMongoCache() {
+  try {
+    const resp = await fetch(`/api/cache?type=${CACHE_TYPE}`);
+    const j    = await resp.json();
+    if (j.ok && j.cached && Array.isArray(j.results)) return j;
+  } catch(e) {}
+  return null;
+}
+
+// ── Cache banner ──────────────────────
+function showCacheBanner(source, date) {
+  const el = document.getElementById('cacheBanner');
+  if (source === 'local') {
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);';
+    el.innerHTML = `<span>💾 Loaded from local cache · <span style="font-family:var(--mono)">${date}</span></span>
+      <button onclick="startBacktest()" style="font-size:12px;font-weight:700;color:var(--blue);cursor:pointer;background:none;border:none;">↻ Refresh</button>`;
+  } else if (source === 'mongo') {
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;background:var(--green-dim);border:1px solid var(--green);';
+    el.innerHTML = `<span>☁ Loaded from MongoDB · <span style="font-family:var(--mono)">${date}</span> · results shared across all users</span>
+      <button onclick="startBacktest()" style="font-size:12px;font-weight:700;color:var(--green);cursor:pointer;background:none;border:none;">↻ Refresh</button>`;
+  } else if (source === 'fresh') {
+    el.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:20px;padding:10px 16px;border-radius:10px;background:var(--gold-dim);border:1px solid var(--gold);';
+    el.innerHTML = `<span>⚡ Fresh backtest · <span style="font-family:var(--mono)">${date}</span> · saved to cache</span>`;
+  }
 }
 
 // ── Stock list ───────────────────────
@@ -361,27 +423,59 @@ async function fetchStocks() {
 
 // ── Progress ─────────────────────────
 function setProgress(pct, label, status) {
-  document.getElementById('progressFill').style.width  = pct + '%';
-  document.getElementById('progressPct').textContent   = pct + '%';
-  document.getElementById('progressLabel').textContent = label;
+  document.getElementById('progressFill').style.width   = pct + '%';
+  document.getElementById('progressPct').textContent    = pct + '%';
+  document.getElementById('progressLabel').textContent  = label;
   document.getElementById('progressStatus').textContent = status;
 }
+
+// ── Show results ──────────────────────
+function showResults(results) {
+  allResults = results;
+  updateSummary();
+  updateEquityBar();
+  renderTable();
+  document.getElementById('idleState').style.display = 'none';
+  ['summaryGrid','equityWrap','toolbar','tblWrap'].forEach(id => {
+    document.getElementById(id).style.display = '';
+  });
+}
+
+// ── Boot: try cache first ─────────────
+(async function boot() {
+  const local = loadFromLocalCache();
+  if (local && local.length) {
+    cacheSource = 'local';
+    cacheDate   = istDateKey();
+    showResults(local);
+    showCacheBanner('local', cacheDate);
+    return;
+  }
+  const mongo = await loadFromMongoCache();
+  if (mongo && mongo.results && mongo.results.length) {
+    cacheSource = 'mongo';
+    cacheDate   = mongo.date;
+    saveToLocalCache(mongo.results);
+    showResults(mongo.results);
+    showCacheBanner('mongo', cacheDate);
+  }
+})();
 
 // ── Main runner ──────────────────────
 async function startBacktest() {
   if (running) return;
-  running = true;
+  running    = true;
   allResults = [];
 
   const btn = document.getElementById('runBtn');
   btn.disabled = true;
   btn.innerHTML = `<div class="spinner"></div> Running…`;
 
-  ['idleState','summaryGrid','equityWrap','toolbar','tblWrap'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = (id === 'idleState') ? 'none' : 'none';
+  document.getElementById('idleState').style.display    = 'none';
+  document.getElementById('cacheBanner').style.display  = 'none';
+  ['summaryGrid','equityWrap','toolbar','tblWrap'].forEach(id => {
+    document.getElementById(id).style.display = 'none';
   });
-  document.getElementById('idleState').style.display = 'none';
 
   const pw = document.getElementById('progressWrap');
   pw.classList.add('visible');
@@ -409,7 +503,7 @@ async function startBacktest() {
         allResults.push(...j.results);
         liveUpdate();
       }
-    } catch(e) { /* skip */ }
+    } catch(e) {}
 
     done += batches[b].length;
     const pct = Math.round(done / symbols.length * 100);
@@ -419,6 +513,14 @@ async function startBacktest() {
 
   setProgress(100, 'Backtest complete!', `${allResults.length} golden cross trades analysed`);
   setTimeout(() => pw.classList.remove('visible'), 3000);
+
+  // Save to caches
+  cacheSource = 'fresh';
+  cacheDate   = istDateKey();
+  saveToLocalCache(allResults);
+  saveToMongoCache(allResults);
+
+  showCacheBanner('fresh', cacheDate);
   liveUpdate();
   resetBtn();
 }
