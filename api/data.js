@@ -44,49 +44,82 @@ function httpsPost(hostname, path, body, headers) {
   });
 }
 
-// ── TOTP generator ─────────────────────────────────────────
-function totp(secret) {
+// ── TOTP generator (matches Python pyotp exactly) ──────────
+function b32decode(secret) {
+  // 1. Clean: strip spaces, uppercase, strip trailing =
+  let s = secret.trim().toUpperCase().replace(/=+$/, '');
   const base32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
   let bits = '';
-  for (const c of secret.toUpperCase().replace(/=+$/, '')) {
+  for (const c of s) {
     const v = base32.indexOf(c);
-    if (v >= 0) bits += v.toString(2).padStart(5, '0');
+    if (v < 0) continue; // skip non-base32 chars
+    bits += v.toString(2).padStart(5, '0');
   }
+  // 2. Pack bits into bytes (discard incomplete last byte, same as Python)
   const bytes = [];
-  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
-  const key    = Buffer.from(bytes);
-  const counter = Math.floor(Date.now() / 1000 / 30);
+  for (let i = 0; i + 8 <= bits.length; i += 8)
+    bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  return Buffer.from(bytes);
+}
+
+function totpCode(key, counter) {
   const buf = Buffer.alloc(8);
   buf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
   buf.writeUInt32BE(counter >>> 0, 4);
-  const hmac  = crypto.createHmac('sha1', key).update(buf).digest();
+  const hmac   = crypto.createHmac('sha1', key).update(buf).digest();
   const offset = hmac[hmac.length - 1] & 0xf;
-  const code   = ((hmac[offset] & 0x7f) << 24 | hmac[offset+1] << 16 | hmac[offset+2] << 8 | hmac[offset+3]) % 1000000;
+  const code   = ((hmac[offset] & 0x7f) << 24 | hmac[offset+1] << 16
+                | hmac[offset+2] << 8 | hmac[offset+3]) % 1000000;
   return code.toString().padStart(6, '0');
 }
 
-// ── Angel One auth ─────────────────────────────────────────
+function totp(secret) {
+  const key     = b32decode(secret);
+  const counter = Math.floor(Date.now() / 1000 / 30);
+  // Return current window code (Angel One accepts ±1 window on their side)
+  return totpCode(key, counter);
+}
+
+// ── Angel One auth (with ±1 TOTP window retry) ─────────────
 async function angelAuth(apiKey, clientId) {
-  const password = process.env.ANGEL_PASSWORD;
+  const password   = process.env.ANGEL_PASSWORD;
   const totpSecret = process.env.ANGEL_TOTP_SECRET;
-  if (!password || !totpSecret) throw new Error('ANGEL_PASSWORD / ANGEL_TOTP_SECRET env vars not set');
+  if (!password)   throw new Error('ANGEL_PASSWORD env var is not set in Vercel');
+  if (!totpSecret) throw new Error('ANGEL_TOTP_SECRET env var is not set in Vercel');
 
-  // clientId can be mobile number (e.g. 9876543210) or Angel One client ID (e.g. A123456)
-  const body = await httpsPost('apiconnect.angelbroking.com', '/rest/auth/angelbroking/user/v1/loginByPassword', {
-    clientcode: clientId,
-    password,                          // Angel One PIN
-    totp: totp(totpSecret)
-  }, {
-    'X-UserType': 'USER',
-    'X-SourceID': 'WEB',
-    'X-ClientLocalIP': '127.0.0.1',
+  const headers = {
+    'X-UserType':       'USER',
+    'X-SourceID':       'WEB',
+    'X-ClientLocalIP':  '127.0.0.1',
     'X-ClientPublicIP': '127.0.0.1',
-    'X-MACAddress': '00:00:00:00:00:00',
-    'X-PrivateKey': apiKey
-  });
+    'X-MACAddress':     '00:00:00:00:00:00',
+    'X-PrivateKey':     apiKey
+  };
 
-  if (!body?.data?.jwtToken) throw new Error(body?.message || 'Angel login failed');
-  return body.data.jwtToken;
+  const key     = b32decode(totpSecret);
+  const counter = Math.floor(Date.now() / 1000 / 30);
+
+  // Try current window, then +1, then -1 (handles ±30s server clock drift)
+  let lastBody;
+  for (const delta of [0, 1, -1]) {
+    const otp  = totpCode(key, counter + delta);
+    const body = await httpsPost('apiconnect.angelbroking.com',
+      '/rest/auth/angelbroking/user/v1/loginByPassword',
+      { clientcode: clientId, password, totp: otp },
+      headers
+    );
+    lastBody = body;
+    if (body?.data?.jwtToken) return body.data.jwtToken;
+    // If error is NOT totp-related, no point retrying
+    const msg = (body?.message || body?.errorcode || '').toLowerCase();
+    if (!msg.includes('totp') && !msg.includes('otp')) break;
+  }
+
+  // Surface the full Angel One response so the error modal shows it clearly
+  const errMsg  = lastBody?.message  || 'Login failed';
+  const errCode = lastBody?.errorcode || '';
+  const rawJson = JSON.stringify(lastBody, null, 2);
+  throw new Error(`${errMsg}${errCode ? ' ('+errCode+')' : ''}\n\nFull response from Angel One:\n${rawJson}`);
 }
 
 // ── Angel One historical data ──────────────────────────────
