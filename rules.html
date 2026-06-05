@@ -248,7 +248,26 @@ button{font-family:var(--font);cursor:pointer;border:0;background:transparent;co
     </div>
   </div>
 
-  <!-- Rule 4: Skip Penny -->
+  <!-- Rule 4: Relative Strength vs Nifty -->
+  <div class="rule-card" id="rsCard">
+    <div class="rule-header">
+      <div class="rule-icon blue" style="background:var(--blue-dim);">📉</div>
+      <div class="rule-meta">
+        <div class="rule-name">Outperforming Nifty (Relative Strength)</div>
+        <div class="rule-desc">Requires the stock's 3-month return at the time of the golden cross to be greater than Nifty 50's 3-month return over the same period. Ensures momentum is stock-specific, not just market-driven. Nifty data is fetched once per scan.</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="rsToggle" onclick="toggleRule('rs')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="rsConfig">
+      <div style="padding:12px 16px;border-radius:var(--r);background:var(--blue-dim);font-size:13px;color:var(--blue);font-weight:600;line-height:1.55;">
+        Stock 3M return (63 trading days ending at cross) must exceed Nifty 50's 3M return for the same window. No threshold to configure — it's a pure relative comparison.
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule 5: Skip Penny -->
   <div class="rule-card" id="pennyCard">
     <div class="rule-header">
       <div class="rule-icon red" style="background:var(--red-dim);">🚫</div>
@@ -343,7 +362,8 @@ const DEFAULT_RULES = {
   requireTV:     false,
   tvMinCr:       10,
   skipPenny:     false,
-  minClose:      100,       // ₹
+  minClose:      100,
+  requireRS:     false,     // stock 3M return > Nifty 3M return
 };
 
 let rules = { ...DEFAULT_RULES };
@@ -362,6 +382,7 @@ function applyToUI() {
   setToggle('vol',   rules.requireVolume);
   setToggle('tv',    rules.requireTV);
   setToggle('penny', rules.skipPenny);
+  setToggle('rs',    rules.requireRS);
   document.getElementById('adxSlider').value = rules.adxMin;
   document.getElementById('adxVal').textContent = rules.adxMin;
   updateAdxSliderBg(rules.adxMin);
@@ -390,6 +411,7 @@ function toggleRule(key) {
   if (key === 'vol')   rules.requireVolume = !rules.requireVolume;
   if (key === 'tv')    rules.requireTV     = !rules.requireTV;
   if (key === 'penny') rules.skipPenny     = !rules.skipPenny;
+  if (key === 'rs')    rules.requireRS     = !rules.requireRS;
   applyToUI();
 }
 

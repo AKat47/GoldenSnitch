@@ -2,7 +2,7 @@
 // POST body: { symbols, requireADX, adxMin, requireVolume, volumeMult }
 
 const https = require('https');
-const { sma, adx, avgVolume } = require('./_indicators');
+const { sma, adx, avgVolume, fetchNiftyMap, niftyPriceAt, threeMonthReturn } = require('./_indicators');
 
 function httpsGet(url) {
   return new Promise((resolve, reject) => {
@@ -57,7 +57,7 @@ async function fetchOHLC(sym) {
   };
 }
 
-async function backtestSymbol(sym, rules) {
+async function backtestSymbol(sym, rules, niftyMap) {
   const data = await fetchOHLC(sym);
   if (!data) return null;
   const { rows, name, ltp } = data;
@@ -90,6 +90,19 @@ async function backtestSymbol(sym, rules) {
 
   // ── Rule: Skip penny stocks ──
   if (rules.skipPenny && closes[crossIdx] < rules.minClose) return null;
+
+  // ── Rule: Stock 3M return > Nifty 3M return ──
+  if (rules.requireRS && niftyMap) {
+    const stockRet = threeMonthReturn(closes, crossIdx);
+    const crossDate = dates[crossIdx];
+    const niftyNow  = niftyPriceAt(niftyMap, crossDate);
+    const prevDate  = new Date(crossDate);
+    prevDate.setDate(prevDate.getDate() - 90);
+    const niftyPrev = niftyPriceAt(niftyMap, prevDate.toISOString().split('T')[0]);
+    const niftyRet  = (niftyNow && niftyPrev)
+      ? (niftyNow - niftyPrev) / niftyPrev * 100 : null;
+    if (stockRet == null || niftyRet == null || stockRet <= niftyRet) return null;
+  }
 
   const entryPrice = closes[crossIdx];
   const entryDate  = dates[crossIdx];
@@ -133,13 +146,16 @@ module.exports = async (req, res) => {
     tvMinCr:       parseFloat(body?.tvMinCr)    || 10,
     skipPenny:     !!body?.skipPenny,
     minClose:      parseFloat(body?.minClose)   || 100,
+    requireRS:     !!body?.requireRS,
   };
+
+  const niftyMap = rules.requireRS ? await fetchNiftyMap(httpsGet) : null;
 
   const results = [];
   for (let i = 0; i < symbols.length; i += 8) {
     const batch   = symbols.slice(i, i+8);
     const settled = await Promise.all(batch.map(async sym => {
-      try { return await backtestSymbol(sym, rules); } catch { return null; }
+      try { return await backtestSymbol(sym, rules, niftyMap); } catch { return null; }
     }));
     for (const r of settled) if (r) results.push(r);
   }

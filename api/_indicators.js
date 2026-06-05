@@ -70,4 +70,48 @@ function avgVolume(volumes, period = 20) {
   return sma(volumes, period);
 }
 
-module.exports = { sma, adx, avgVolume };
+// Fetch Nifty 50 (^NSEI) daily closes → { date: close } map
+// Used for the relative-strength-vs-Nifty filter.
+// Returns null if fetch fails (filter should be skipped gracefully).
+function fetchNiftyMap(httpsGet) {
+  const to   = Math.floor(Date.now() / 1000);
+  const from = to - 1200 * 86400;
+  const url  = `https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI`
+    + `?period1=${from}&period2=${to}&interval=1d`;
+  return httpsGet(url).then(json => {
+    const result = json?.chart?.result?.[0];
+    if (!result) return null;
+    const ts     = result.timestamp || [];
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const map    = {};
+    ts.forEach((t, i) => {
+      if (closes[i] != null) {
+        map[new Date(t * 1000).toISOString().split('T')[0]] = closes[i];
+      }
+    });
+    return map;
+  }).catch(() => null);
+}
+
+// Given a date→close Nifty map and a target date, find the closest available price.
+function niftyPriceAt(map, date) {
+  if (!map) return null;
+  if (map[date]) return map[date];
+  // walk back up to 5 trading days
+  const d = new Date(date);
+  for (let i = 1; i <= 5; i++) {
+    d.setDate(d.getDate() - 1);
+    const key = d.toISOString().split('T')[0];
+    if (map[key]) return map[key];
+  }
+  return null;
+}
+
+// 3-month return of a stock at a given index (63 trading days ≈ 3 months)
+function threeMonthReturn(closes, idx, tradingDays = 63) {
+  const startIdx = idx - tradingDays;
+  if (startIdx < 0) return null;
+  return (closes[idx] - closes[startIdx]) / closes[startIdx] * 100;
+}
+
+module.exports = { sma, adx, avgVolume, fetchNiftyMap, niftyPriceAt, threeMonthReturn };
