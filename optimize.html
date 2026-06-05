@@ -331,6 +331,7 @@ let selectedSL = new Set([5, 7, 10]);
 let allCombos  = {};
 let processed  = 0;
 let sortKey    = 'avgReturn_desc';
+let running    = false;
 
 // ── Tag buttons ───────────────────────
 function buildTags() {
@@ -386,6 +387,7 @@ function setProgress(pct, label, status) {
   document.getElementById('progressPct').textContent    = pct + '%';
   document.getElementById('progressLabel').textContent  = label;
   document.getElementById('progressStatus').textContent = status;
+  if (document.hidden) document.title = `⚡ ${pct}% — Optimizer running`;
 }
 
 // ── Main runner ───────────────────────
@@ -394,6 +396,7 @@ async function startOptimizer() {
   const slArr = [...selectedSL].sort((a,b)=>a-b);
   if (!tpArr.length || !slArr.length) { alert('Select at least one TP and one SL value.'); return; }
 
+  running = true;
   const btn = document.getElementById('runBtn');
   btn.disabled = true;
   btn.innerHTML = `<div class="spinner"></div> Running…`;
@@ -470,10 +473,41 @@ async function startOptimizer() {
 }
 
 function resetBtn() {
+  running = false;
+  hideBgBanner();
+  document.title = 'GoldenSnitch — Parameter Optimizer';
   const btn = document.getElementById('runBtn');
   btn.disabled = false;
   btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg> Run Simulation`;
 }
+
+// ── Background-tab support ────────────
+function showBgBanner(pct) {
+  let el = document.getElementById('bgBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bgBanner';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:999;' +
+      'background:var(--gold);color:#fff;padding:10px 24px;' +
+      'display:flex;align-items:center;justify-content:space-between;' +
+      'font-size:13px;font-weight:700;box-shadow:0 -2px 12px rgba(0,0,0,.15);';
+    el.innerHTML = `<span id="bgBannerTxt">⚡ Optimizer running in background…</span>
+      <span style="opacity:.8;font-size:12px;">← come back anytime</span>`;
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  document.getElementById('bgBannerTxt').textContent = `⚡ Optimizer running in background… ${pct}`;
+}
+function hideBgBanner() {
+  const el = document.getElementById('bgBanner');
+  if (el) el.style.display = 'none';
+}
+document.addEventListener('visibilitychange', () => {
+  if (!running) return;
+  const pct = document.getElementById('progressPct')?.textContent || '';
+  if (document.hidden) { document.title = `⚡ ${pct} — Optimizer running`; showBgBanner(pct); }
+  else { document.title = 'GoldenSnitch — Parameter Optimizer'; hideBgBanner(); }
+});
 
 // ── Finalise combos for display ────────
 function getFinalisedCombos() {

@@ -448,6 +448,7 @@ function setProgress(pct, label, status) {
   document.getElementById('progressPct').textContent    = pct + '%';
   document.getElementById('progressLabel').textContent  = label;
   document.getElementById('progressStatus').textContent = status;
+  if (document.hidden) document.title = `⚡ ${pct}% — 10% Exit Backtest running`;
 }
 
 // ── Show results ──────────────────────
@@ -559,10 +560,40 @@ function liveUpdate() {
 
 function resetBtn() {
   running = false;
+  hideBgBanner();
+  document.title = 'GoldenSnitch — 10% Exit Backtest';
   const btn = document.getElementById('runBtn');
   btn.disabled = false;
   btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg> Run Backtest`;
 }
+
+// ── Background-tab support ────────────
+function showBgBanner(pct) {
+  let el = document.getElementById('bgBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bgBanner';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:999;' +
+      'background:var(--gold);color:#fff;padding:10px 24px;' +
+      'display:flex;align-items:center;justify-content:space-between;' +
+      'font-size:13px;font-weight:700;box-shadow:0 -2px 12px rgba(0,0,0,.15);';
+    el.innerHTML = `<span id="bgBannerTxt">⚡ 10% Exit Backtest running in background…</span>
+      <span style="opacity:.8;font-size:12px;">← come back anytime</span>`;
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  document.getElementById('bgBannerTxt').textContent = `⚡ 10% Exit Backtest running in background… ${pct}`;
+}
+function hideBgBanner() {
+  const el = document.getElementById('bgBanner');
+  if (el) el.style.display = 'none';
+}
+document.addEventListener('visibilitychange', () => {
+  if (!running) return;
+  const pct = document.getElementById('progressPct')?.textContent || '';
+  if (document.hidden) { document.title = `⚡ ${pct} — 10% Exit running`; showBgBanner(pct); }
+  else { document.title = 'GoldenSnitch — 10% Exit Backtest'; hideBgBanner(); }
+});
 
 // ── Summary ───────────────────────────
 function updateSummary() {
