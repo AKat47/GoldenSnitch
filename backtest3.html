@@ -207,29 +207,79 @@ tr:hover td{background:var(--bg2);}
 /* ── Spinner ─── */
 .spinner{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .7s linear infinite;flex-shrink:0;}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Sidebar ─── */
+.hdr{display:none!important;}
+.sb{
+  position:fixed;left:0;top:0;height:100vh;z-index:200;
+  width:220px;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  transition:width .2s ease;overflow:hidden;
+}
+.sb.collapsed{width:52px;}
+.sb-logo{
+  display:flex;align-items:center;gap:10px;padding:15px 14px;
+  text-decoration:none;color:var(--txt);border-bottom:1px solid var(--border);
+  flex-shrink:0;min-height:58px;overflow:hidden;
+}
+.sb-logo .logo-mark{width:30px;height:30px;border-radius:8px;flex-shrink:0;
+  background:linear-gradient(135deg,#f59e0b,#d97706);
+  display:grid;place-items:center;font-size:15px;
+  box-shadow:0 3px 10px var(--gold-glow);}
+.sb-brand{font-size:14px;font-weight:800;letter-spacing:-0.03em;
+  white-space:nowrap;
+  background:linear-gradient(135deg,#f59e0b,#d97706);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.sb-nav{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 0;}
+.sb-item{
+  display:flex;align-items:center;gap:12px;padding:10px 14px;
+  text-decoration:none;color:var(--txt2);font-size:13px;font-weight:600;
+  white-space:nowrap;transition:background .12s,color .12s;
+}
+.sb-item:hover{background:var(--bg3);color:var(--txt);}
+.sb-item.active{background:var(--green-dim);color:var(--green);border-right:2px solid var(--green);}
+.sb-icon{font-size:15px;width:24px;text-align:center;flex-shrink:0;line-height:1.2;}
+.sb-label{white-space:nowrap;overflow:hidden;transition:opacity .15s;}
+.sb.collapsed .sb-label{opacity:0;width:0;overflow:hidden;}
+.sb-bottom{border-top:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.sb.collapsed .theme-toggle{display:none;}
+.sb-toggle{
+  display:flex;align-items:center;justify-content:center;
+  padding:7px;border-radius:8px;width:100%;
+  background:transparent;border:1px solid var(--border2);
+  color:var(--txt3);cursor:pointer;font-size:15px;line-height:1;
+  transition:all .12s;
+}
+.sb-toggle:hover{background:var(--bg3);color:var(--txt);}
+/* Main offset */
+.main{margin-left:220px!important;transition:margin-left .2s ease;max-width:none!important;}
+body.sb-collapsed .main{margin-left:52px!important;}
 </style>
 </head>
 <body>
 
-<header class="hdr">
-  <a href="/" class="logo">
+<div class="sb" id="sidebar">
+  <a href="/" class="sb-logo">
     <div class="logo-mark">✦</div>
-    <span>GoldenSnitch</span>
+    <span class="sb-brand">GoldenSnitch</span>
   </a>
-    <a href="/" class="nav-link">Scanner</a>
-  <a href="/intraday.html" class="nav-link">⚡ Intraday</a>
-  <a href="/intraday-rules.html" class="nav-link">⚙ Intraday Rules</a>
-  <a href="/intraday-backtest.html" class="nav-link">📋 Intraday BT</a>
-  <a href="/backtest3.html" class="nav-link active">Backtest</a>
-  <a href="/rules.html" class="nav-link">⚙ Rules</a>
-  <a href="/optimize.html" class="nav-link">🔬 Optimizer</a>
-  <div class="hdr-right">
+  <nav class="sb-nav">
+    <a href="/" class="sb-item"><span class="sb-icon">🔍</span><span class="sb-label">Scanner</span></a>
+    <a href="/intraday.html" class="sb-item"><span class="sb-icon">⚡</span><span class="sb-label">Intraday</span></a>
+    <a href="/intraday-rules.html" class="sb-item"><span class="sb-icon">⚙</span><span class="sb-label">Intraday Rules</span></a>
+    <a href="/intraday-backtest.html" class="sb-item"><span class="sb-icon">📋</span><span class="sb-label">Intraday BT</span></a>
+    <a href="/backtest3.html" class="sb-item active"><span class="sb-icon">📊</span><span class="sb-label">Backtest</span></a>
+    <a href="/rules.html" class="sb-item"><span class="sb-icon">⚙</span><span class="sb-label">Rules</span></a>
+    <a href="/optimize.html" class="sb-item"><span class="sb-icon">🔬</span><span class="sb-label">Optimizer</span></a>
+  </nav>
+  <div class="sb-bottom">
     <div class="theme-toggle">
       <button class="theme-btn" data-t="light">Light</button>
       <button class="theme-btn" data-t="dark">Dark</button>
     </div>
+    <button class="sb-toggle" onclick="toggleSidebar()" id="sbToggle">‹</button>
   </div>
-</header>
+</div>
 
 <main class="main">
 
@@ -773,5 +823,22 @@ function renderTable() {
   }
 }
 </script>
+
+// ── Sidebar toggle ──────────────────────────────────────
+function toggleSidebar(){
+  var c=document.body.classList.toggle('sb-collapsed');
+  document.getElementById('sidebar').classList.toggle('collapsed',c);
+  localStorage.setItem('gc_sb',c?'1':'0');
+  document.getElementById('sbToggle').textContent=c?'›':'‹';
+}
+(function(){
+  if(localStorage.getItem('gc_sb')==='1'){
+    document.body.classList.add('sb-collapsed');
+    var sb=document.getElementById('sidebar');
+    if(sb) sb.classList.add('collapsed');
+    var t=document.getElementById('sbToggle');
+    if(t) t.textContent='›';
+  }
+})();
 </body>
 </html>
