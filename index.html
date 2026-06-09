@@ -560,7 +560,7 @@ body.sb-collapsed .main{margin-left:52px!important;}
     <div class="splash-sub">
       Catch the Golden Cross before everyone else does.<br><br>
       Search any NSE stock to see its 50 / 200 DMA crossover status, chart, and signal strength.
-      Or tap <b>Catch 'em All</b> to scan every stock for fresh crosses across Nifty 500.
+      Or tap <b>Run Scan</b> to scan every stock for fresh crosses across Nifty 500.
     </div>
   </div>
 </main>
@@ -1407,7 +1407,7 @@ async function startScanAll(forceRefresh) {
       _cacheDate    = istDateKey();
       renderScanResults();
       btn.disabled  = false;
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Run Scan</span>';
       return;
     }
   }
@@ -1425,7 +1425,7 @@ async function startScanAll(forceRefresh) {
       saveToLocalCache(_scanResults); // warm local cache
       renderScanResults();
       btn.disabled  = false;
-      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Run Scan</span>';
       return;
     }
   }
@@ -1535,7 +1535,7 @@ async function startScanAll(forceRefresh) {
   renderScanResults();
 
   btn.disabled = false;
-  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Catch \'em All</span>';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span>Run Scan</span>';
 }
 
 function renderScanResults() {
@@ -1683,7 +1683,7 @@ if (AO.apiKey && AO.clientId) testDataSource();
     saveToLocalCache(_scanResults); // warm local cache for next time
     renderScanResults();
   }
-  // 3. Nothing cached — splash screen stays, user clicks "Catch 'em All"
+  // 3. Nothing cached — splash screen stays, user clicks "Run Scan"
 })();
 </script>
 
