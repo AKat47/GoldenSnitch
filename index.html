@@ -698,8 +698,14 @@ body.sb-collapsed .main{margin-left:52px!important;}
 function setTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('gc_theme', t);
-  document.getElementById('themeLight').classList.toggle('active', t === 'light');
-  document.getElementById('themeDark').classList.toggle('active',  t === 'dark');
+  var l = document.getElementById('themeLight');
+  var d = document.getElementById('themeDark');
+  if (l) l.classList.toggle('active', t === 'light');
+  if (d) d.classList.toggle('active',  t === 'dark');
+  // update sidebar theme buttons
+  document.querySelectorAll('.theme-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-t') === t);
+  });
 }
 setTheme(localStorage.getItem('gc_theme') || 'light');
 
@@ -1425,7 +1431,7 @@ async function loadNseStocks() {
     }
   } catch(e) {}
   // Fallback to built-in list
-  return NSE_STOCKS.map(function(r){ return { ticker: r[0], name: r[1] }; });
+  return (NSE_STOCKS || []).map(function(r){ return { ticker: r[0], name: r[1] }; });
 }
 
 async function startScanAll(forceRefresh) {
