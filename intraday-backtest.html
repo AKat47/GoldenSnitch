@@ -432,6 +432,18 @@ function renderRulesPanel() {
 // ── State ─────────────────────────────
 let allTrades=[], byStock=[], activeView='trades', tradeSortKey='date_desc';
 
+function restoreSavedResults(){
+  try{
+    var saved = localStorage.getItem('gc_ibt_trades');
+    if(!saved) return;
+    allTrades = JSON.parse(saved);
+    if(allTrades && allTrades.length){
+      document.getElementById('resultsWrap').style.display='block';
+      renderAll();
+    }
+  }catch(e){ allTrades=[]; }
+}
+
 // ── Universe ──────────────────────────
 let universe=[];
 function loadUniverse(){
@@ -471,6 +483,7 @@ async function startBacktest(){
   btn.disabled=true;
   btn.innerHTML=`<div class="spinner"></div> Running…`;
   allTrades=[];byStock=[];
+  try{localStorage.removeItem('gc_ibt_trades');}catch(e){}
   document.getElementById('summaryGrid').style.display='none';
   document.getElementById('tableSection').style.display='none';
   document.getElementById('eqBar').style.display='none';
@@ -510,6 +523,8 @@ async function startBacktest(){
   setProgress(100,'Backtest complete!',`${allTrades.length} total trades across ${symbols.length} stocks`);
   setTimeout(()=>pw.classList.remove('visible'),3000);
   renderAll();
+  // persist results so they survive page navigation
+  try{localStorage.setItem('gc_ibt_trades', JSON.stringify(allTrades));}catch(e){}
   btn.disabled=false;
   btn.innerHTML=`<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg> Run Backtest`;
 }
