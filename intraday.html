@@ -179,10 +179,22 @@ tr.buy-row td:first-child{border-left:3px solid var(--green);}
 .mono{font-family:var(--mono);}
 .buy-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;background:var(--green-dim);color:var(--green);}
 .watch-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;background:var(--blue-dim);color:var(--blue);}
-.score-badge{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:999px;font-size:11px;font-weight:800;font-family:var(--mono);}
+.score-badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:22px;border-radius:999px;font-size:11px;font-weight:800;font-family:var(--mono);padding:0 5px;}
 .score-badge.high{background:var(--green-dim);color:var(--green);}
 .score-badge.mid {background:var(--gold-dim);color:var(--gold);}
 .score-badge.low {background:var(--bg3);color:var(--txt3);}
+/* Momentum scanner specific */
+.strong-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800;background:var(--green-dim);color:var(--green);}
+.dir-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:999px;font-size:10.5px;font-weight:800;}
+.dir-badge.bull{background:var(--green-dim);color:var(--green);}
+.dir-badge.bear{background:var(--red-dim);color:var(--red);}
+.orb-badge{display:inline-flex;padding:2px 7px;border-radius:999px;font-size:10.5px;font-weight:700;}
+.orb-badge.breakout {background:var(--green-dim);color:var(--green);}
+.orb-badge.breakdown{background:var(--red-dim);color:var(--red);}
+.orb-badge.inside   {background:var(--bg3);color:var(--txt3);}
+.score-bar-wrap{display:inline-flex;align-items:center;gap:5px;}
+.score-bar{width:36px;height:4px;background:var(--bg3);border-radius:99px;overflow:hidden;flex-shrink:0;}
+.score-bar-fill{height:100%;border-radius:99px;}
 
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .dot.ok{background:var(--green);}
@@ -287,6 +299,8 @@ body.sb-collapsed .main{margin-left:52px!important;}
     <div class="status-item">Last scan: <strong id="lastScanTime">—</strong></div>
     <div class="status-sep">·</div>
     <div class="status-item">Signals: <strong id="signalCount" style="color:var(--green)">—</strong></div>
+    <div class="status-sep">·</div>
+    <div class="status-item">NIFTY: <strong id="niftyChange" style="color:var(--txt2)">—</strong></div>
     <div class="next-scan" id="nextScanWrap" style="display:none">
       Next scan in <span class="countdown" id="countdown">5:00</span>
       <button onclick="runScan()" title="Scan now" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border2);font-size:11px;font-weight:700;color:var(--txt2);">Scan now</button>
@@ -320,7 +334,7 @@ body.sb-collapsed .main{margin-left:52px!important;}
       <span>Step 2 — Live 5-Min Scanner</span>
       <span class="phase-badge" id="p2Badge">Waiting</span>
     </div>
-    <div class="phase-sub">Scans qualified stocks every 5 minutes using VWAP, EMA9/21, ADX, RSI, Volume. Active window: 09:30–14:45 IST. Force exit at 15:10.</div>
+    <div class="phase-sub">Momentum scanner — Volume → VWAP → Relative Strength → ORB → EMA trend. Returns only stocks scoring ≥70 out of 100. STRONG (≥80) = act now, WATCH (70-79) = monitor. Active 09:15–15:30 IST.</div>
     <div class="phase-row">
       <button class="action-btn gold" id="scanBtn" onclick="runScan()" disabled>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -339,20 +353,20 @@ body.sb-collapsed .main{margin-left:52px!important;}
     </div>
   </div>
 
-  <!-- Signal cards -->
+  <!-- Signal cards (STRONG SETUP top picks) -->
   <div id="signalCardsWrap" style="display:none">
-    <div style="font-size:14px;font-weight:800;margin-bottom:12px;">🟢 Buy Signals</div>
+    <div style="font-size:14px;font-weight:800;margin-bottom:12px;">🔥 Strong Setups</div>
     <div class="signal-cards" id="signalCards"></div>
   </div>
 
   <!-- Table -->
   <div id="tableWrap" style="display:none">
     <div class="tbl-header">
-      <div class="tbl-title">Scan Results</div>
+      <div class="tbl-title">Momentum Signals</div>
       <div class="filter-tabs">
-        <div class="ftab active" data-f="buy"   onclick="setFilter('buy')">BUY ✓</div>
-        <div class="ftab"        data-f="watch" onclick="setFilter('watch')">Watchlist</div>
-        <div class="ftab"        data-f="all"   onclick="setFilter('all')">All</div>
+        <div class="ftab active" id="ftab-strong" data-f="strong" onclick="setFilter('strong')">STRONG 🔥</div>
+        <div class="ftab" id="ftab-watch"  data-f="watch"  onclick="setFilter('watch')">WATCH 👀</div>
+        <div class="ftab" id="ftab-all"    data-f="all"    onclick="setFilter('all')">All</div>
       </div>
       <input class="search-box" id="searchBox" placeholder="Search…" oninput="renderTable()">
       <span style="font-size:12px;color:var(--txt3);margin-left:auto;" id="rowCount"></span>
@@ -363,19 +377,20 @@ body.sb-collapsed .main{margin-left:52px!important;}
           <tr>
             <th>Symbol</th>
             <th>Price</th>
-            <th>Gap%</th>
-            <th>VWAP</th>
-            <th>EMA9/21</th>
-            <th>ADX</th>
-            <th>RSI</th>
+            <th>Chg%</th>
+            <th>Dir</th>
             <th>Vol×</th>
-            <th>Conditions</th>
+            <th>VWAP</th>
+            <th>EMA Trend</th>
+            <th>RSI</th>
+            <th>ATR%</th>
+            <th>RS vs NF</th>
+            <th>ORB</th>
             <th>Score</th>
+            <th>Signal</th>
             <th>Entry</th>
             <th>SL</th>
-            <th>Target</th>
-            <th>R:R</th>
-            <th>Signal</th>
+            <th>T1 / T2</th>
           </tr>
         </thead>
         <tbody id="tblBody"></tbody>
@@ -398,63 +413,14 @@ function applyTheme(t){document.documentElement.setAttribute('data-theme',t);loc
 document.querySelectorAll('.theme-btn').forEach(b=>b.onclick=()=>applyTheme(b.dataset.t));
 applyTheme(localStorage.getItem('gc_theme')||'light');
 
-// ── Intraday Rules ────────────────────────────────────────
-const INTRADAY_RULE_DEFAULTS = {
-  requireVWAP: true,
-  requireEMA:  true,
-  requireADX:  true,  adxMin:    25,
-  requireRSI:  true,  rsiMin:    55,  rsiMax: 70,
-  requireVol:  true,  volMult:   2.0,
-  requireTime: true,  timeStart: 570, timeEnd: 885,
-  requireGap:  true,  gapDown:  -2,   gapUp:   3,
-};
-let intradayRules = { ...INTRADAY_RULE_DEFAULTS };
-
-function loadIntradayRules() {
-  try {
-    const saved = localStorage.getItem('gc_intraday_rules');
-    if (saved) intradayRules = { ...INTRADAY_RULE_DEFAULTS, ...JSON.parse(saved) };
-  } catch(e) {}
-}
-
-function applyRules(stock) {
-  // Re-evaluate isBuy using the active rules from intradayRules
-  const c = stock.conds || {};
-  const { adxMin, rsiMin, rsiMax, volMult, timeStart, timeEnd, gapDown, gapUp } = intradayRules;
-
-  const condVWAP = !intradayRules.requireVWAP || !!c.condVWAP;
-  const condEMA  = !intradayRules.requireEMA  || !!c.condEMA;
-  const condADX  = !intradayRules.requireADX  || (stock.adx != null && stock.adx > adxMin);
-  const condRSI  = !intradayRules.requireRSI  || (stock.rsi != null && stock.rsi >= rsiMin && stock.rsi <= rsiMax);
-  const condVol  = !intradayRules.requireVol  || (stock.volRatio >= volMult);
-  const condGap  = !intradayRules.requireGap  || (stock.gapPct >= gapDown && stock.gapPct <= gapUp);
-
-  // Time: recompute from current IST
-  let condTime = true;
-  if (intradayRules.requireTime) {
-    const now = new Date();
-    const ist = new Date(now.getTime() + 5.5*60*60*1000);
-    const istMins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-    condTime = istMins >= timeStart && istMins <= timeEnd;
-  }
-
-  const isBuy = condVWAP && condEMA && condADX && condRSI && condVol && condTime && condGap;
-  return {
-    ...stock,
-    isBuy,
-    conds: { ...c, condVWAP: c.condVWAP, condEMA: c.condEMA, condADX: c.condADX, condRSI: c.condRSI, condVol: c.condVol, condTime: c.condTime },
-    _activeConds: { condVWAP, condEMA, condADX, condRSI, condVol, condTime, condGap },
-  };
-}
-
 // ── State ─────────────────────────────────────────────────
+// Scoring is 100% server-side — no client-side applyRules() needed.
+// allSignals = all results with score >= 70, sorted by score desc.
 let universe    = [];   // [{ticker, name, prevClose, atrPct, avgDailyVol}]
 let prevCloses  = {};
 let avgDailyVols= {};
-let atrPcts     = {};
-let allSignals  = [];
-let allWatch    = [];
-let activeFilter= 'buy';
+let allSignals  = [];   // score >= 70 (STRONG + WATCH combined)
+let activeFilter= 'strong';
 let autoTimer   = null;
 let countTimer  = null;
 let countSecs   = 300;
@@ -514,8 +480,8 @@ function loadUniverse(){
     const data=JSON.parse(localStorage.getItem('gc_id_universe')||'[]');
     if(!data.length)return false;
     universe=data;
-    prevCloses={};avgDailyVols={};atrPcts={};
-    universe.forEach(s=>{prevCloses[s.ticker]=s.prevClose;avgDailyVols[s.ticker]=s.avgDailyVol;atrPcts[s.ticker]=s.atrPct;});
+    prevCloses={};avgDailyVols={};
+    universe.forEach(s=>{prevCloses[s.ticker]=s.prevClose;avgDailyVols[s.ticker]=s.avgDailyVol;});
     return true;
   }catch(e){return false;}
 }
@@ -558,8 +524,8 @@ async function buildUniverse(){
   }
 
   // Build lookup maps
-  prevCloses={};avgDailyVols={};atrPcts={};
-  universe.forEach(s=>{prevCloses[s.ticker]=s.prevClose;avgDailyVols[s.ticker]=s.avgDailyVol;atrPcts[s.ticker]=s.atrPct;});
+  prevCloses={};avgDailyVols={};
+  universe.forEach(s=>{prevCloses[s.ticker]=s.prevClose;avgDailyVols[s.ticker]=s.avgDailyVol;});
 
   saveUniverse();
   document.getElementById('p1Badge').textContent='Done ✓';
@@ -588,25 +554,28 @@ async function runScan(){
   pw.classList.add('visible');
 
   const symbols=universe.map(s=>s.ticker);
-  const batches=chunk(symbols,40);
-  allSignals=[];allWatch=[];
-  let done=0,totalCandles=0;
+  const batches=chunk(symbols,50);
+  allSignals=[];
+  let done=0;
 
   for(let b=0;b<batches.length;b++){
     try{
       const resp=await fetch('/api/intraday-scan',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({symbols:batches[b],prevCloses,avgDailyVols,atrPcts})
+        body:JSON.stringify({symbols:batches[b],prevCloses,avgDailyVols})
       });
       const j=await resp.json();
       if(j.ok){
-        // Apply user-configured rules to recompute isBuy
-        const allResults = [...(j.signals||[]), ...(j.watchlist||[])].map(applyRules);
-        allSignals.push(...allResults.filter(r=>r.isBuy));
-        allWatch.push(...allResults.filter(r=>!r.isBuy));
-        if(j.signals?.length) totalCandles=j.signals[0].candles||0;
+        // Server returns only score >= 70, sorted by score desc — no client-side re-scoring needed
+        allSignals.push(...(j.signals||[]));
         lastScanTime=j.scanTime;
         document.getElementById('lastScanTime').textContent=j.scanTime||'—';
+        if(j.niftyChange!=null){
+          const nc=j.niftyChange;
+          const niftyEl=document.getElementById('niftyChange');
+          niftyEl.textContent=(nc>=0?'+':'')+nc.toFixed(2)+'%';
+          niftyEl.style.color=nc>=0?'var(--green)':'var(--red)';
+        }
         renderAll();
         document.getElementById('tableWrap').style.display='';
         document.getElementById('emptyState').style.display='none';
@@ -617,12 +586,17 @@ async function runScan(){
     const pct=Math.round(done/symbols.length*100);
     document.getElementById('p2Fill').style.width=pct+'%';
     document.getElementById('p2ProgPct').textContent=pct+'%';
-    document.getElementById('p2ProgLabel').textContent=`Scanning ${done}/${symbols.length} · ${allSignals.length} BUY signals`;
+    const strong=allSignals.filter(r=>r.signalType==='STRONG').length;
+    document.getElementById('p2ProgLabel').textContent=`Scanning ${done}/${symbols.length} · ${strong} STRONG · ${allSignals.length-strong} WATCH`;
   }
 
+  // Sort final combined list: score desc → volRatio desc
+  allSignals.sort((a,b)=>b.score-a.score||b.volRatio-a.volRatio);
+
+  const strongCount=allSignals.filter(r=>r.signalType==='STRONG').length;
   document.getElementById('scannedCount').textContent=symbols.length;
-  document.getElementById('candleInfo').textContent=totalCandles?totalCandles+' candles':'—';
-  document.getElementById('signalCount').textContent=allSignals.length;
+  document.getElementById('candleInfo').textContent=allSignals.length?allSignals[0].candles+' candles':'—';
+  document.getElementById('signalCount').textContent=strongCount+' STRONG / '+(allSignals.length-strongCount)+' WATCH';
   document.getElementById('p2Badge').className='phase-badge done';
   document.getElementById('p2Badge').textContent='Active';
 
@@ -667,36 +641,40 @@ function renderAll(){
 
 const medals=['🥇','🥈','🥉','4️⃣','5️⃣'];
 function renderCards(){
-  const top=allSignals.slice(0,5);
+  // Show top STRONG setups in cards; fall back to WATCH if none
+  const strong=allSignals.filter(r=>r.signalType==='STRONG');
+  const top=(strong.length?strong:allSignals).slice(0,5);
   const wrap=document.getElementById('signalCardsWrap');
   if(!top.length){wrap.style.display='none';return;}
   wrap.style.display='';
-  document.getElementById('signalCards').innerHTML=top.map((s,i)=>`
-    <div class="sig-card buy">
+  document.getElementById('signalCards').innerHTML=top.map((s,i)=>{
+    const isBull=s.direction==='BULL';
+    const dirCol=isBull?'var(--green)':'var(--red)';
+    const scoreCol=s.score>=80?'var(--green)':s.score>=70?'var(--gold)':'var(--txt2)';
+    const chgSign=s.changePct>=0?'+':'';
+    const rsSign=s.rs!=null?(s.rs>=0?'+':''):'';
+    return`<div class="sig-card ${s.signalType==='STRONG'?'buy':''}">
       <div class="sig-card-rank">${medals[i]||''}</div>
-      <div class="sig-ticker">${s.ticker}</div>
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:2px;">
+        <span class="sig-ticker" style="color:${dirCol}">${s.ticker}</span>
+        <span class="dir-badge ${isBull?'bull':'bear'}">${isBull?'▲ BULL':'▼ BEAR'}</span>
+      </div>
       <div class="sig-name">${s.name}</div>
-      <div class="sig-price">₹${fmt(s.ltp)}</div>
-      <div class="sig-row"><span class="sig-row-label">VWAP</span><span class="sig-row-val">₹${fmt(s.vwap)}</span></div>
-      <div class="sig-row"><span class="sig-row-label">ADX</span><span class="sig-row-val">${s.adx??'—'}</span></div>
+      <div class="sig-price">₹${fmt(s.ltp)} <span style="font-size:14px;color:${s.changePct>=0?'var(--green)':'var(--red)'}">${chgSign}${s.changePct}%</span></div>
+      <div class="sig-row"><span class="sig-row-label">VWAP</span><span class="sig-row-val" style="color:${s.vwapStatus==='above'?'var(--green)':'var(--red)'}">₹${fmt(s.vwap)} ${s.vwapStatus==='above'?'▲':'▼'}</span></div>
+      <div class="sig-row"><span class="sig-row-label">Vol×</span><span class="sig-row-val" style="color:${s.volRatio>=2?'var(--green)':'var(--txt)'}">${s.volRatio}×</span></div>
       <div class="sig-row"><span class="sig-row-label">RSI</span><span class="sig-row-val">${s.rsi??'—'}</span></div>
-      <div class="sig-row"><span class="sig-row-label">Vol×</span><span class="sig-row-val">${s.volRatio}×</span></div>
-      <div class="sig-row"><span class="sig-row-label">Score</span><span class="sig-row-val" style="color:var(--green)">${s.score}</span></div>
+      <div class="sig-row"><span class="sig-row-label">RS vs NIFTY</span><span class="sig-row-val" style="color:${s.rs!=null&&s.rs>0?'var(--green)':s.rs!=null&&s.rs<0?'var(--red)':'var(--txt2)'}">${s.rs!=null?rsSign+s.rs+'%':'—'}</span></div>
+      <div class="sig-row"><span class="sig-row-label">ORB</span><span class="orb-badge ${s.orbStatus}">${s.orbStatus}</span></div>
+      <div class="sig-row"><span class="sig-row-label">Score</span><span class="sig-row-val" style="color:${scoreCol}">${s.score}/100</span></div>
       <div class="sig-levels">
         <span class="level-chip entry">E ₹${s.entry}</span>
         <span class="level-chip sl">SL ₹${s.sl}</span>
-        <span class="level-chip tgt">T ₹${s.target}</span>
+        <span class="level-chip tgt">T1 ₹${s.t1}</span>
+        <span class="level-chip tgt" style="opacity:.7">T2 ₹${s.t2}</span>
       </div>
-      <div class="cond-row">
-        ${condDot('VWAP',s.conds?.condVWAP)}${condDot('EMA',s.conds?.condEMA)}${condDot('ADX',s.conds?.condADX)}${condDot('RSI',s.conds?.condRSI)}${condDot('Vol',s.conds?.condVol)}
-      </div>
-    </div>
-  `).join('');
-}
-
-function condDot(label,val){
-  const cls=val==null?'na':val?'ok':'fail';
-  return`<span class="cond ${cls}">${val==null?'·':val?'✓':'✗'} ${label}</span>`;
+    </div>`;
+  }).join('');
 }
 
 function setFilter(f){
@@ -708,59 +686,68 @@ function setFilter(f){
 function renderTable(){
   const q=(document.getElementById('searchBox')?.value||'').toLowerCase();
   let rows;
-  if(activeFilter==='buy')   rows=allSignals;
-  else if(activeFilter==='watch') rows=allWatch;
-  else rows=[...allSignals,...allWatch].sort((a,b)=>b.score-a.score);
+  if(activeFilter==='strong')     rows=allSignals.filter(r=>r.signalType==='STRONG');
+  else if(activeFilter==='watch') rows=allSignals.filter(r=>r.signalType==='WATCH');
+  else                            rows=allSignals;
 
-  if(q) rows=rows.filter(r=>r.ticker.toLowerCase().includes(q)||r.name.toLowerCase().includes(q));
-  document.getElementById('rowCount').textContent=rows.length+' stocks';
+  if(q) rows=rows.filter(r=>r.ticker.toLowerCase().includes(q)||(r.name||'').toLowerCase().includes(q));
+  document.getElementById('rowCount').textContent=rows.length+' signals';
 
   const tbody=document.getElementById('tblBody');
   if(!rows.length){
-    tbody.innerHTML=`<tr><td colspan="15" style="text-align:center;padding:40px;color:var(--txt3)">No results — ${activeFilter==='buy'?'no buy signals yet. Try scanning again.':'nothing here yet.'}</td></tr>`;
+    const hint=activeFilter==='strong'?'No STRONG setups yet — try scanning again or check WATCH tab.':
+               activeFilter==='watch' ?'No WATCH signals yet.':'No signals yet. Scan during market hours (09:15–15:30 IST).';
+    tbody.innerHTML=`<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--txt3)">${hint}</td></tr>`;
     return;
   }
 
   tbody.innerHTML=rows.map(r=>{
-    const isBuy=r.isBuy;
-    const sc=r.score>=7?'high':r.score>=4?'mid':'low';
-    const emaOk=r.ema9&&r.ema21?r.ema9>r.ema21:null;
-    return`<tr class="${isBuy?'buy-row':''}">
-      <td><span class="sym-cell">${r.ticker}</span></td>
+    const isBull=r.direction==='BULL';
+    const isStrong=r.signalType==='STRONG';
+    const sc=r.score>=80?'high':r.score>=70?'mid':'low';
+    const chgSign=r.changePct>=0?'+':'';
+    const rsSign=r.rs!=null?(r.rs>=0?'+':''):'';
+
+    // EMA trend display
+    let emaDisplay,emaCol;
+    if(r.emaTrend==='bull')           {emaDisplay='9▲21▲50';emaCol='var(--green)';}
+    else if(r.emaTrend==='weak-bull') {emaDisplay='9▲21▼50';emaCol='var(--gold)';}
+    else if(r.emaTrend==='bear')      {emaDisplay='9▼21▼50';emaCol='var(--red)';}
+    else if(r.emaTrend==='weak-bear') {emaDisplay='9▼21▲50';emaCol='var(--gold)';}
+    else                              {emaDisplay='mixed';emaCol='var(--txt3)';}
+
+    // Score bar fill colour
+    const barCol=r.score>=80?'var(--green)':r.score>=70?'var(--gold)':'var(--txt3)';
+
+    return`<tr class="${isStrong?'buy-row':''}">
+      <td><span class="sym-cell">${r.ticker}</span><br><span style="font-size:10.5px;color:var(--txt3);font-weight:400;">${(r.name||'').slice(0,20)}</span></td>
       <td class="price-cell">₹${fmt(r.ltp)}</td>
-      <td class="mono" style="color:${r.gapPct>=0?'var(--green)':'var(--red)'}">${r.gapPct>=0?'+':''}${r.gapPct}%</td>
-      <td class="mono">₹${fmt(r.vwap)}</td>
+      <td class="mono" style="color:${r.changePct>=0?'var(--green)':'var(--red)'}">${chgSign}${r.changePct}%</td>
+      <td><span class="dir-badge ${isBull?'bull':'bear'}">${isBull?'▲':'▼'} ${r.direction}</span></td>
+      <td><span class="mono" style="color:${r.volRatio>=3?'var(--green)':r.volRatio>=2?'var(--gold)':'var(--txt2)'}">${r.volRatio}×</span></td>
+      <td><span class="mono" style="color:${r.vwapStatus==='above'?'var(--green)':'var(--red)'}">₹${fmt(r.vwap)} ${r.vwapStatus==='above'?'▲':'▼'}</span></td>
+      <td><span class="mono" style="font-size:11px;color:${emaCol}">${emaDisplay}</span></td>
+      <td><span class="mono" style="color:${r.rsi&&r.rsi>=50&&r.rsi<=70?'var(--green)':r.rsi&&r.rsi>70?'var(--red)':'var(--txt2)'}">${r.rsi??'—'}</span></td>
+      <td><span class="mono">${r.atrPct??'—'}%</span></td>
+      <td><span class="mono" style="color:${r.rs!=null&&r.rs>0?'var(--green)':r.rs!=null&&r.rs<0?'var(--red)':'var(--txt2)'}">${r.rs!=null?rsSign+r.rs+'%':'—'}</span></td>
+      <td><span class="orb-badge ${r.orbStatus||'inside'}">${r.orbStatus||'—'}</span></td>
       <td>
-        <span style="font-family:var(--mono);font-size:12px;color:${emaOk?'var(--green)':'var(--red)'}">
-          ${r.ema9??'—'} ${emaOk?'▲':'▼'} ${r.ema21??'—'}
-        </span>
-      </td>
-      <td><span class="mono" style="color:${r.adx&&r.adx>25?'var(--green)':'var(--txt2)'}">${r.adx??'—'}</span></td>
-      <td><span class="mono" style="color:${r.rsi&&r.rsi>=55&&r.rsi<=70?'var(--green)':r.rsi&&r.rsi>70?'var(--red)':'var(--txt2)'}">${r.rsi??'—'}</span></td>
-      <td><span class="mono" style="color:${r.volRatio>=2?'var(--green)':'var(--txt2)'}">${r.volRatio}×</span></td>
-      <td>
-        <div style="display:flex;gap:4px;">
-          <span class="dot ${r.conds?.condVWAP?'ok':'fail'}" title="VWAP"></span>
-          <span class="dot ${r.conds?.condEMA?'ok':'fail'}"  title="EMA"></span>
-          <span class="dot ${r.conds?.condADX?'ok':'fail'}"  title="ADX"></span>
-          <span class="dot ${r.conds?.condRSI?'ok':'fail'}"  title="RSI"></span>
-          <span class="dot ${r.conds?.condVol?'ok':'fail'}"  title="Vol"></span>
+        <div class="score-bar-wrap">
+          <span class="score-badge ${sc}">${r.score}</span>
+          <div class="score-bar"><div class="score-bar-fill" style="width:${r.score}%;background:${barCol}"></div></div>
         </div>
       </td>
-      <td><span class="score-badge ${sc}">${r.score}</span></td>
-      <td class="mono">${r.entry?'₹'+r.entry:'—'}</td>
-      <td class="mono" style="color:var(--red)">${r.sl?'₹'+r.sl:'—'}</td>
-      <td class="mono" style="color:var(--green)">${r.target?'₹'+r.target:'—'}</td>
-      <td class="mono">${r.rr?'1:'+r.rr:'—'}</td>
-      <td>${isBuy?`<span class="buy-badge">▲ BUY</span>`:`<span class="watch-badge">◎ Watch</span>`}</td>
+      <td>${isStrong?`<span class="strong-badge">🔥 STRONG</span>`:`<span class="watch-badge">👀 WATCH</span>`}</td>
+      <td class="mono">₹${r.entry??'—'}</td>
+      <td class="mono" style="color:var(--red)">₹${r.sl??'—'}</td>
+      <td class="mono" style="color:var(--green)">₹${r.t1??'—'} <span style="opacity:.6">/ ₹${r.t2??'—'}</span></td>
     </tr>`;
   }).join('');
 }
 
-function fmt(n){return n==null?'—':n.toLocaleString('en-IN',{maximumFractionDigits:2});}
+function fmt(n){return n==null?'—':typeof n==='number'?n.toLocaleString('en-IN',{maximumFractionDigits:2}):n;}
 
 // ── Boot ──────────────────────────────────────────────────
-loadIntradayRules();
 setInterval(updateClock,1000);
 updateClock();
 
