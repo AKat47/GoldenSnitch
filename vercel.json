@@ -1,16 +1,17 @@
 {
   "rewrites": [
-    { "source": "/api/data",     "destination": "/api/data.js"     },
-    { "source": "/api/scan",     "destination": "/api/scan.js"     },
-    { "source": "/api/notify",   "destination": "/api/notify.js"   },
-    { "source": "/api/stocks",   "destination": "/api/stocks.js"   },
-    { "source": "/api/cache",    "destination": "/api/cache.js"    },
-    { "source": "/api/backtest",  "destination": "/api/backtest.js"  },
-    { "source": "/api/backtest2", "destination": "/api/backtest2.js" },
-    { "source": "/api/backtest3", "destination": "/api/backtest3.js" },
+    { "source": "/api/data",               "destination": "/api/data.js"               },
+    { "source": "/api/scan",               "destination": "/api/scan.js"               },
+    { "source": "/api/notify",             "destination": "/api/notify.js"             },
+    { "source": "/api/stocks",             "destination": "/api/stocks.js"             },
+    { "source": "/api/cache",              "destination": "/api/cache.js"              },
+    { "source": "/api/backtest3",          "destination": "/api/backtest3.js"          },
     { "source": "/api/optimize",           "destination": "/api/optimize.js"           },
     { "source": "/api/intraday-universe",  "destination": "/api/intraday-universe.js"  },
     { "source": "/api/intraday-scan",      "destination": "/api/intraday-scan.js"      },
-    { "source": "/api/intraday-backtest", "destination": "/api/intraday-backtest.js" }
-  ]
+    { "source": "/api/intraday-backtest",  "destination": "/api/intraday-backtest.js"  }
+  ],
+  "functions": {
+    "api/*.js": { "maxDuration": 60 }
+  }
 }

@@ -241,12 +241,23 @@ async function fetchYahooCandles(sym) {
 }
 
 // ── Main handler ───────────────────────────────────────────
+// Accepts GET /api/data?symbol=X (Yahoo only)
+// or POST /api/data { symbol, angelKey, angelClient } (Angel One + Yahoo fallback)
+// Credentials MUST come via POST body — never URL params (they get logged by servers/CDN)
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const sym        = (req.query.symbol      || '').toUpperCase().trim();
-  const angelKey   = (req.query.angelKey    || '').trim();
-  const angelClient= (req.query.angelClient || '').trim();
+  // Support both GET (symbol in query, no creds) and POST (all in body)
+  const body        = req.method === 'POST'
+    ? (typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {})
+    : {};
+
+  const sym         = ((body.symbol      || req.query.symbol      || '')).toUpperCase().trim();
+  const angelKey    = (body.angelKey     || '').trim();   // POST body only — never query param
+  const angelClient = (body.angelClient  || '').trim();   // POST body only — never query param
 
   if (!sym) return res.status(400).json({ ok: false, error: 'symbol required' });
 

@@ -801,10 +801,11 @@ async function testDataSource() {
   var btn = document.getElementById('testSrcBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Testing…'; }
   try {
-    var qs = '?symbol=RELIANCE';
-    if (AO.apiKey)   qs += '&angelKey='    + encodeURIComponent(AO.apiKey);
-    if (AO.clientId) qs += '&angelClient=' + encodeURIComponent(AO.clientId);
-    var resp = await fetch('/api/data' + qs);
+    var resp = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: 'RELIANCE', angelKey: AO.apiKey || undefined, angelClient: AO.clientId || undefined })
+    });
     var json = await resp.json();
     if (json.ok) {
       var src = json.source || 'yahoo';
@@ -1244,10 +1245,11 @@ async function analyzeStock(sym) {
   document.getElementById('main').innerHTML = '<div class="spinner-wrap"><div class="spinner"></div><div class="spin-txt">Fetching data for '+sym+'…</div></div>';
 
   try {
-    var qs = '?symbol='+encodeURIComponent(sym);
-    if (AO.apiKey)   qs += '&angelKey='+encodeURIComponent(AO.apiKey);
-    if (AO.clientId) qs += '&angelClient='+encodeURIComponent(AO.clientId);
-    var resp = await fetch('/api/data'+qs);
+    var resp = await fetch('/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: sym, angelKey: AO.apiKey || undefined, angelClient: AO.clientId || undefined })
+    });
     var json = await resp.json();
     if(!json.ok) throw new Error(json.error||'Failed to fetch');
     var src = json.source || 'yahoo';
