@@ -319,6 +319,14 @@ body.sb-collapsed .main{margin-left:52px!important;}
     <div class="status-item">Signals: <strong id="signalCount" style="color:var(--green)">—</strong></div>
     <div class="status-sep">·</div>
     <div class="status-item">NIFTY: <strong id="niftyChange" style="color:var(--txt2)">—</strong></div>
+    <div class="status-sep">·</div>
+    <div id="srcPill" onclick="showSrcSettings()" title="Click to configure data source"
+      style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;
+             font-size:11.5px;font-weight:700;cursor:pointer;border:1px solid var(--border);
+             background:var(--bg3);white-space:nowrap;">
+      <span id="srcDot" style="width:7px;height:7px;border-radius:50%;background:var(--txt3);flex-shrink:0"></span>
+      <span id="srcLabel">Yahoo (15-min delay)</span>
+    </div>
     <div class="next-scan" id="nextScanWrap" style="display:none">
       Next scan in <span class="countdown" id="countdown">5:00</span>
       <button onclick="runScan()" title="Scan now" style="padding:4px 10px;border-radius:999px;border:1px solid var(--border2);font-size:11px;font-weight:700;color:var(--txt2);">Scan now</button>
@@ -434,6 +442,44 @@ body.sb-collapsed .main{margin-left:52px!important;}
 
 </main>
 
+<!-- Data source settings modal -->
+<div id="srcModal" style="display:none;position:fixed;inset:0;z-index:300;
+  background:rgba(0,0,0,.5);backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:20px"
+  onclick="if(event.target===this)closeSrcSettings()">
+  <div style="background:var(--bg);border-radius:var(--rl);border:1px solid var(--border2);
+    width:100%;max-width:460px;padding:24px;max-height:90dvh;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <div style="width:36px;height:36px;border-radius:9px;background:var(--gold-dim);display:grid;place-items:center;font-size:18px;flex-shrink:0">🅐</div>
+      <div>
+        <div style="font-size:15px;font-weight:800">Angel One SmartAPI</div>
+        <div style="font-size:12px;color:var(--txt3);margin-top:2px">Real-time data · replaces Yahoo Finance 15-min delay</div>
+      </div>
+    </div>
+    <div id="angelStatusId" style="font-size:12px;margin:10px 0"></div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:11.5px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">API Key</label>
+      <input id="aKey" type="password" placeholder="From smartapi.angelone.in → Create App"
+        style="width:100%;padding:10px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg2);color:var(--txt);font-size:13px;outline:none" oninput="saveAngel()">
+    </div>
+    <div style="margin-bottom:12px">
+      <label style="display:block;font-size:11.5px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Mobile Number / Client ID</label>
+      <input id="aClient" type="text" placeholder="Registered mobile e.g. 9876543210"
+        style="width:100%;padding:10px 14px;border-radius:var(--r);border:1px solid var(--border2);background:var(--bg2);color:var(--txt);font-size:13px;outline:none" oninput="saveAngel()">
+    </div>
+    <div style="padding:12px 14px;background:var(--bg2);border-radius:var(--r);font-size:12px;color:var(--txt3);line-height:1.8;margin-bottom:14px">
+      <strong style="color:var(--txt2)">Also required as server env vars (Vercel):</strong><br>
+      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_PASSWORD</span> → your Angel One PIN<br>
+      <span style="font-family:var(--mono);color:var(--gold)">ANGEL_TOTP_SECRET</span> → 32-char TOTP key<br>
+      <span style="font-size:11px">Settings are shared with the main Scanner page — configure once, used everywhere. Leave blank to use Yahoo Finance.</span>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="saveAngel();closeSrcSettings()" style="flex:1;padding:11px;border-radius:var(--r);background:var(--green);color:#fff;font-size:13px;font-weight:800;">Save</button>
+      <button id="testSrcBtn" onclick="testAngel()" style="flex:0 0 auto;padding:11px 18px;border-radius:var(--r);border:1.5px solid var(--border2);font-size:13px;font-weight:700;color:var(--txt2);">Test Connection</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── Theme ─────────────────────────────────────────────────
 function applyTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('gc_theme',t);document.querySelectorAll('.theme-btn').forEach(b=>b.classList.toggle('active',b.dataset.t===t));}
@@ -536,10 +582,12 @@ async function buildUniverse(){
     try{
       const resp=await fetch('/api/intraday-universe',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({symbols:batches[b]})
+        body:JSON.stringify({symbols:batches[b],
+          angelKey:AO.apiKey||undefined,angelClient:AO.clientId||undefined})
       });
       const j=await resp.json();
       if(j.ok&&j.universe)universe.push(...j.universe);
+      if(j.dataSource)updateSrcPill(j.angelError?'error':j.dataSource,j.angelError);
     }catch(e){}
 
     done+=batches[b].length;
@@ -590,9 +638,11 @@ async function runScan(){
     try{
       const resp=await fetch('/api/intraday-scan',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({symbols:batches[b],prevCloses,avgDailyVols})
+        body:JSON.stringify({symbols:batches[b],prevCloses,avgDailyVols,
+          angelKey:AO.apiKey||undefined,angelClient:AO.clientId||undefined})
       });
       const j=await resp.json();
+      if(j.dataSource)updateSrcPill(j.angelError?'error':j.dataSource,j.angelError);
       if(j.ok&&j.noTradeWindow){
         // 09:15–09:30 IST — opening volatility trap. Collect only, no signals.
         document.getElementById('p2Badge').className='phase-badge waiting';
@@ -839,9 +889,52 @@ function checkAlerts(){
   saveAlerted(seen);
 }
 
+// ── Data source (Angel One / Yahoo) ───────────────────────
+// Shared with the main Scanner page via the same localStorage keys.
+const AO={
+  apiKey:  localStorage.getItem('gc_angel_key')   ||'',
+  clientId:localStorage.getItem('gc_angel_client')||''
+};
+function showSrcSettings(){
+  document.getElementById('aKey').value=AO.apiKey;
+  document.getElementById('aClient').value=AO.clientId;
+  document.getElementById('srcModal').style.display='flex';
+}
+function closeSrcSettings(){document.getElementById('srcModal').style.display='none';}
+function saveAngel(){
+  AO.apiKey  =document.getElementById('aKey').value.trim();
+  AO.clientId=document.getElementById('aClient').value.trim();
+  localStorage.setItem('gc_angel_key',AO.apiKey);
+  localStorage.setItem('gc_angel_client',AO.clientId);
+  updateSrcPill(AO.apiKey&&AO.clientId?'configured':null);
+}
+function updateSrcPill(source,err){
+  const dot=document.getElementById('srcDot'),lbl=document.getElementById('srcLabel');
+  if(source==='angel'){dot.style.background='var(--green)';lbl.textContent='Angel One · real-time';}
+  else if(source==='configured'){dot.style.background='var(--gold)';lbl.textContent='Angel One · saved (untested)';}
+  else if(source==='error'){dot.style.background='var(--red)';lbl.textContent='Angel error → Yahoo fallback';lbl.title=err||'';}
+  else if(source==='yahoo'){dot.style.background='var(--blue)';lbl.textContent='Yahoo (15-min delay)';}
+  else{dot.style.background='var(--txt3)';lbl.textContent='Yahoo (15-min delay)';}
+}
+async function testAngel(){
+  const btn=document.getElementById('testSrcBtn');
+  const st=document.getElementById('angelStatusId');
+  if(!AO.apiKey||!AO.clientId){st.innerHTML='<span style="color:var(--red)">Enter API key and client ID first.</span>';return;}
+  btn.textContent='Testing…';btn.disabled=true;
+  try{
+    const r=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({symbol:'RELIANCE',angelKey:AO.apiKey,angelClient:AO.clientId})});
+    const j=await r.json();
+    if(j.source==='angel'){st.innerHTML='<span style="color:var(--green)">✓ Connected — Angel One real-time data active.</span>';updateSrcPill('angel');}
+    else{st.innerHTML='<span style="color:var(--red)">✗ '+(j.angelError||'Auth failed — using Yahoo fallback.')+'</span>';updateSrcPill('error',j.angelError);}
+  }catch(e){st.innerHTML='<span style="color:var(--red)">✗ Request failed.</span>';}
+  btn.textContent='Test Connection';btn.disabled=false;
+}
+
 // ── Boot ──────────────────────────────────────────────────
 setInterval(updateClock,1000);
 updateClock();
+updateSrcPill(AO.apiKey&&AO.clientId?'configured':null);
 
 // Restore alert toggle states
 document.getElementById('alertToggle').checked=alertsOn;

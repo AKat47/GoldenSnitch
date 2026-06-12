@@ -123,14 +123,26 @@ module.exports = async (req, res) => {
   const body    = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
   const symbols = (body?.symbols || []).slice(0, 150);
 
+  // ── Angel One (optional — Yahoo fallback) ───────────────
+  const angelKey    = (body?.angelKey    || '').trim();
+  const angelClient = (body?.angelClient || '').trim();
+  let jwt = null, angelError = null;
+  if (angelKey && angelClient) {
+    try { jwt = await angel.authenticate(angelKey, angelClient); }
+    catch (e) { angelError = e.message; }
+  }
+
   const universe = [];
   for (let i = 0; i < symbols.length; i += 8) {
     const batch   = symbols.slice(i, i + 8);
     const settled = await Promise.all(batch.map(async sym => {
-      try { return await filterSymbol(sym); } catch { return null; }
+      try { return await filterSymbol(sym, jwt, angelKey); } catch { return null; }
     }));
     for (const r of settled) if (r) universe.push(r);
   }
 
-  return res.status(200).json({ ok: true, universe, total: universe.length });
+  return res.status(200).json({
+    ok: true, universe, total: universe.length,
+    dataSource: jwt ? 'angel' : 'yahoo', angelError,
+  });
 };

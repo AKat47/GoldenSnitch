@@ -14,6 +14,7 @@
 // Returns: { ok, signals, strong, watch, scanned, found, scanTime, marketOpen, niftyChange }
 
 const https = require('https');
+const angel = require('./_angel');
 
 // ── HTTP ──────────────────────────────────────────────────
 function httpsGet(url) {
@@ -131,7 +132,33 @@ async function fetchNifty() {
 }
 
 // ── Fetch 5-min candles (2 days for EMA-50 warmup) ────────
-async function fetch5Min(sym) {
+// Tries Angel One first (real-time) if jwt provided, else Yahoo (15-min delay).
+async function fetch5Min(sym, jwt, angelKey) {
+  if (jwt && angelKey) {
+    try {
+      const from = angel.istStr(angel.daysAgoIST(4), '09:15'); // 4 cal days ≈ 2 sessions incl. weekends
+      const to   = angel.istNowStr();
+      const raw  = await angel.fetchCandles(sym, 'FIVE_MINUTE', from, to, jwt, angelKey);
+      if (raw.length >= 15) {
+        const today = istDateStr(new Date());
+        const rows = raw.map(r => {
+          const d = new Date(r[0]); // "2026-06-12T09:15:00+05:30"
+          return {
+            ts:      Math.floor(d.getTime() / 1000),
+            istDate: istDateStr(d),
+            mins:    istMinsOf(d),
+            open: r[1], high: r[2], low: r[3], close: r[4],
+            volume: r[5] ?? 0,
+          };
+        }).filter(r => r.close != null);
+        if (rows.length >= 15) return { rows, today, name: sym, source: 'angel' };
+      }
+    } catch (e) { /* fall through to Yahoo */ }
+  }
+  return fetch5MinYahoo(sym);
+}
+
+async function fetch5MinYahoo(sym) {
   const ticker = sym + '.NS';
   const url    = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=5m&range=2d`;
   const json   = await httpsGet(url);
@@ -157,12 +184,12 @@ async function fetch5Min(sym) {
   }).filter(r => r.close != null && r.high != null && r.low != null);
 
   const name = result.meta?.longName || result.meta?.shortName || sym;
-  return { rows, today, name };
+  return { rows, today, name, source: 'yahoo' };
 }
 
 // ── Core symbol analysis ──────────────────────────────────
-async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg) {
-  const data = await fetch5Min(sym);
+async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg, jwt, angelKey) {
+  const data = await fetch5Min(sym, jwt, angelKey);
   if (!data || data.rows.length < 15) return null;
 
   const { rows, today, name } = data;
@@ -432,6 +459,15 @@ module.exports = async (req, res) => {
     minATRpct: parseFloat(body?.minATRpct) || 0.5,
   };
 
+  // ── Angel One (optional — real-time data; Yahoo fallback) ──
+  const angelKey    = (body?.angelKey    || '').trim();
+  const angelClient = (body?.angelClient || '').trim();
+  let jwt = null, angelError = null;
+  if (angelKey && angelClient) {
+    try { jwt = await angel.authenticate(angelKey, angelClient); }
+    catch (e) { angelError = e.message; }
+  }
+
   // ── NO-TRADE WINDOW: 09:15–09:30 IST ──────────────────
   // Opening volatility trap — collect data only, no signals.
   const istNow  = toIST(new Date());
@@ -458,7 +494,7 @@ module.exports = async (req, res) => {
     const batch   = symbols.slice(i, i + 8);
     const settled = await Promise.all(batch.map(async sym => {
       try {
-        return await scanSymbol(sym, prevCloses[sym] ?? null, avgDailyVols[sym] ?? null, niftyData, cfg);
+        return await scanSymbol(sym, prevCloses[sym] ?? null, avgDailyVols[sym] ?? null, niftyData, cfg, jwt, angelKey);
       } catch { return null; }
     }));
     for (const r of settled) if (r) results.push(r);
@@ -486,5 +522,7 @@ module.exports = async (req, res) => {
     scanTime:    `${hh}:${mm}`,
     marketOpen:  mNow >= 9 * 60 + 15 && mNow <= 15 * 60 + 30,
     niftyChange: niftyData?.niftyChange != null ? +niftyData.niftyChange.toFixed(2) : null,
+    dataSource:  jwt ? 'angel' : 'yahoo',
+    angelError,
   });
 };
