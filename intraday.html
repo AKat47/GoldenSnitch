@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <script>(function(){var t=localStorage.getItem('gc_theme')||'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* auth guard */(function(){var t=localStorage.getItem('gc_auth'),e=+(localStorage.getItem('gc_auth_exp')||0);if(!t||Date.now()>=e){location.replace('/login.html');return;}addEventListener('DOMContentLoaded',function(){var b=document.querySelector('.sb-bottom');if(b){var x=document.createElement('button');x.className='sb-toggle';x.title='Logout';x.textContent='⎋ Logout';x.onclick=function(){localStorage.removeItem('gc_auth');localStorage.removeItem('gc_auth_exp');localStorage.removeItem('gc_auth_user');location.replace('/login.html');};b.appendChild(x);}});})();</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -319,6 +320,8 @@ body.sb-collapsed .main{margin-left:52px!important;}
     <div class="status-item">Signals: <strong id="signalCount" style="color:var(--green)">—</strong></div>
     <div class="status-sep">·</div>
     <div class="status-item">NIFTY: <strong id="niftyChange" style="color:var(--txt2)">—</strong></div>
+    <div class="status-sep">·</div>
+    <div class="status-item">Candle Feed: <strong id="candleFeedStatus" style="color:var(--txt3)">—</strong></div>
     <div class="status-sep">·</div>
     <div id="srcPill" onclick="showSrcSettings()" title="Click to configure data source"
       style="display:flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;
@@ -633,6 +636,8 @@ async function runScan(){
   const batches=chunk(symbols,50);
   allSignals=[];
   let done=0;
+  let waitingForCandles=false;
+  const feedTotals={loaded:0,requested:0,failed:[]};
 
   for(let b=0;b<batches.length;b++){
     try{
@@ -643,6 +648,15 @@ async function runScan(){
       });
       const j=await resp.json();
       if(j.dataSource)updateSrcPill(j.angelError?'error':j.dataSource,j.angelError);
+      if(j.candleFeed)updateCandleFeed(j.candleFeed,feedTotals);
+      if(j.ok&&j.waitingForCandles){
+        // Angel configured but no OHLCV yet — do NOT show "0 signals" silently
+        document.getElementById('p2Badge').className='phase-badge waiting';
+        document.getElementById('p2Badge').textContent='Waiting for candles';
+        document.getElementById('p2ProgLabel').textContent=j.message||'Waiting for candle data…';
+        waitingForCandles=true;
+        continue;
+      }
       if(j.ok&&j.noTradeWindow){
         // 09:15–09:30 IST — opening volatility trap. Collect only, no signals.
         document.getElementById('p2Badge').className='phase-badge waiting';
@@ -684,8 +698,13 @@ async function runScan(){
   document.getElementById('scannedCount').textContent=symbols.length;
   document.getElementById('candleInfo').textContent=allSignals.length?allSignals[0].candles+' candles':'—';
   document.getElementById('signalCount').textContent=strongCount+' STRONG / '+(allSignals.length-strongCount)+' WATCH';
-  document.getElementById('p2Badge').className='phase-badge done';
-  document.getElementById('p2Badge').textContent='Active';
+  if(waitingForCandles&&!allSignals.length){
+    document.getElementById('p2Badge').className='phase-badge waiting';
+    document.getElementById('p2Badge').textContent='Waiting for candles';
+  }else{
+    document.getElementById('p2Badge').className='phase-badge done';
+    document.getElementById('p2Badge').textContent='Active';
+  }
 
   pw.classList.remove('visible');
   scanning=false;
@@ -916,6 +935,28 @@ function updateSrcPill(source,err){
   else if(source==='yahoo'){dot.style.background='var(--blue)';lbl.textContent='Yahoo (15-min delay)';}
   else{dot.style.background='var(--txt3)';lbl.textContent='Yahoo (15-min delay)';}
 }
+// ── Candle feed status ────────────────────────────────────
+function updateCandleFeed(cf,totals){
+  if(totals){
+    totals.loaded+=cf.loaded||0;
+    totals.requested+=cf.requested||0;
+    if(cf.failed)totals.failed.push(...cf.failed);
+  }
+  const el=document.getElementById('candleFeedStatus');
+  const L=totals?totals.loaded:cf.loaded,R=totals?totals.requested:cf.requested;
+  if(cf.status==='WAITING'){
+    el.textContent='WAITING — no candles yet';
+    el.style.color='var(--orange)';
+  }else if(cf.status==='CONNECTED'){
+    el.textContent=`CONNECTED · ${L} / ${R} stocks`;
+    el.style.color=L===R?'var(--green)':'var(--gold)';
+    el.title=totals&&totals.failed.length?('No candles: '+totals.failed.slice(0,10).join(', ')):'';
+  }else{
+    el.textContent=`Yahoo · ${L} / ${R} stocks (delayed)`;
+    el.style.color='var(--blue)';
+  }
+}
+
 async function testAngel(){
   const btn=document.getElementById('testSrcBtn');
   const st=document.getElementById('angelStatusId');

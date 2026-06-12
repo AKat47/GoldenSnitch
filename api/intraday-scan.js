@@ -13,8 +13,9 @@
 // }
 // Returns: { ok, signals, strong, watch, scanned, found, scanTime, marketOpen, niftyChange }
 
-const https = require('https');
-const angel = require('./_angel');
+const https   = require('https');
+const angel   = require('./_angel');
+const candles = require('./_candles');
 
 // ── HTTP ──────────────────────────────────────────────────
 function httpsGet(url) {
@@ -131,33 +132,8 @@ async function fetchNifty() {
   return _niftyCache;
 }
 
-// ── Fetch 5-min candles (2 days for EMA-50 warmup) ────────
-// Tries Angel One first (real-time) if jwt provided, else Yahoo (15-min delay).
-async function fetch5Min(sym, jwt, angelKey) {
-  if (jwt && angelKey) {
-    try {
-      const from = angel.istStr(angel.daysAgoIST(4), '09:15'); // 4 cal days ≈ 2 sessions incl. weekends
-      const to   = angel.istNowStr();
-      const raw  = await angel.fetchCandles(sym, 'FIVE_MINUTE', from, to, jwt, angelKey);
-      if (raw.length >= 15) {
-        const today = istDateStr(new Date());
-        const rows = raw.map(r => {
-          const d = new Date(r[0]); // "2026-06-12T09:15:00+05:30"
-          return {
-            ts:      Math.floor(d.getTime() / 1000),
-            istDate: istDateStr(d),
-            mins:    istMinsOf(d),
-            open: r[1], high: r[2], low: r[3], close: r[4],
-            volume: r[5] ?? 0,
-          };
-        }).filter(r => r.close != null);
-        if (rows.length >= 15) return { rows, today, name: sym, source: 'angel' };
-      }
-    } catch (e) { /* fall through to Yahoo */ }
-  }
-  return fetch5MinYahoo(sym);
-}
-
+// ── Fetch 5-min candles (Yahoo path — 15-min delay) ───────
+// Angel candles come preloaded from api/_candles.js (throttled provider).
 async function fetch5MinYahoo(sym) {
   const ticker = sym + '.NS';
   const url    = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=5m&range=2d`;
@@ -188,8 +164,11 @@ async function fetch5MinYahoo(sym) {
 }
 
 // ── Core symbol analysis ──────────────────────────────────
-async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg, jwt, angelKey) {
-  const data = await fetch5Min(sym, jwt, angelKey);
+// preRows: candles preloaded from the Angel provider (null → Yahoo fetch)
+async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg, preRows) {
+  const data = preRows
+    ? { rows: preRows, today: istDateStr(new Date()), name: sym }
+    : await fetch5MinYahoo(sym);
   if (!data || data.rows.length < 15) return null;
 
   const { rows, today, name } = data;
@@ -488,13 +467,39 @@ module.exports = async (req, res) => {
   // Fetch NIFTY once (used for RS calculation on every symbol)
   const niftyData = await fetchNifty().catch(() => null);
 
-  // Scan in parallel batches of 8
+  // ── CANDLE FEED (Angel mode) ──────────────────────────
+  // Preload OHLCV via the throttled provider. No silent fallback:
+  // if Angel is configured but returns no candles, say so — don't
+  // quietly return zero signals or mix in 15-min-delayed Yahoo data.
+  let feed = null;
+  if (jwt) {
+    feed = await candles.loadBatch(symbols, jwt, angelKey);
+    if (feed.loaded === 0 && symbols.length > 0) {
+      const ist2 = toIST(new Date());
+      return res.status(200).json({
+        ok: true, waitingForCandles: true,
+        candleFeed: { status: 'WAITING', loaded: 0, requested: symbols.length,
+                      failed: feed.failed.slice(0, 10) },
+        signals: [], strong: [], watch: [],
+        scanned: 0, found: 0,
+        scanTime: `${String(ist2.getUTCHours()).padStart(2,'0')}:${String(ist2.getUTCMinutes()).padStart(2,'0')}`,
+        marketOpen: true, niftyChange: null,
+        dataSource: 'angel', angelError,
+        message: 'Waiting for candle data — Angel One returned no 5-min candles yet.',
+      });
+    }
+  }
+
+  // Scan: Angel mode uses preloaded candles (parallel OK — no API calls);
+  // Yahoo mode fetches per symbol in batches of 8.
   const results = [];
   for (let i = 0; i < symbols.length; i += 8) {
     const batch   = symbols.slice(i, i + 8);
     const settled = await Promise.all(batch.map(async sym => {
       try {
-        return await scanSymbol(sym, prevCloses[sym] ?? null, avgDailyVols[sym] ?? null, niftyData, cfg, jwt, angelKey);
+        if (jwt && !feed.data[sym]) return null; // candle missing → reported in candleFeed, no silent Yahoo mix
+        return await scanSymbol(sym, prevCloses[sym] ?? null, avgDailyVols[sym] ?? null, niftyData, cfg,
+                                jwt ? feed.data[sym] : null);
       } catch { return null; }
     }));
     for (const r of settled) if (r) results.push(r);
@@ -524,5 +529,9 @@ module.exports = async (req, res) => {
     niftyChange: niftyData?.niftyChange != null ? +niftyData.niftyChange.toFixed(2) : null,
     dataSource:  jwt ? 'angel' : 'yahoo',
     angelError,
+    candleFeed:  jwt
+      ? { status: 'CONNECTED', loaded: feed.loaded, requested: feed.requested,
+          failed: feed.failed.slice(0, 10) }
+      : { status: 'YAHOO', loaded: symbols.length, requested: symbols.length, failed: [] },
   });
 };
