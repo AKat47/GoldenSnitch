@@ -197,6 +197,19 @@ tr.best-row td:first-child{border-left:3px solid var(--gold);}
 .sb-icon{font-size:15px;width:24px;text-align:center;flex-shrink:0;line-height:1.2;}
 .sb-label{white-space:nowrap;overflow:hidden;transition:opacity .15s;}
 .sb.collapsed .sb-label{opacity:0;width:0;overflow:hidden;}
+/* Collapsed sidebar icon tooltips */
+.sb-item{position:relative;}
+.sb.collapsed .sb-item::after{
+  content:attr(data-tip);
+  position:absolute;left:56px;top:50%;transform:translateY(-50%);
+  background:var(--bg4);color:var(--txt);
+  padding:5px 12px;border-radius:8px;font-size:12.5px;font-weight:600;
+  white-space:nowrap;pointer-events:none;opacity:0;
+  border:1px solid var(--border2);
+  box-shadow:0 4px 14px rgba(0,0,0,.2);
+  transition:opacity .12s;z-index:300;
+}
+.sb.collapsed .sb-item:hover::after{opacity:1;}
 .sb-bottom{border-top:1px solid var(--border);padding:10px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .sb.collapsed .theme-toggle{display:none;}
 .sb-toggle{
@@ -220,13 +233,13 @@ body.sb-collapsed .main{margin-left:52px!important;}
     <span class="sb-brand">GoldenSnitch</span>
   </a>
   <nav class="sb-nav">
-    <a href="/" class="sb-item"><span class="sb-icon">🔍</span><span class="sb-label">Scanner</span></a>
-    <a href="/intraday.html" class="sb-item"><span class="sb-icon">⚡</span><span class="sb-label">Intraday</span></a>
-    <a href="/intraday-rules.html" class="sb-item"><span class="sb-icon">⚙</span><span class="sb-label">Intraday Rules</span></a>
-    <a href="/intraday-backtest.html" class="sb-item"><span class="sb-icon">📋</span><span class="sb-label">Intraday BT</span></a>
-    <a href="/backtest3.html" class="sb-item"><span class="sb-icon">📊</span><span class="sb-label">Backtest</span></a>
-    <a href="/rules.html" class="sb-item"><span class="sb-icon">⚙</span><span class="sb-label">Rules</span></a>
-    <a href="/optimize.html" class="sb-item active"><span class="sb-icon">🔬</span><span class="sb-label">Optimizer</span></a>
+    <a href="/" data-tip="Scanner" class="sb-item"><span class="sb-icon">🔍</span><span class="sb-label">Scanner</span></a>
+    <a href="/intraday.html" data-tip="Intraday" class="sb-item"><span class="sb-icon">⚡</span><span class="sb-label">Intraday</span></a>
+    <a href="/intraday-rules.html" data-tip="Intraday Rules" class="sb-item"><span class="sb-icon">⚙</span><span class="sb-label">Intraday Rules</span></a>
+    <a href="/intraday-backtest.html" data-tip="Intraday BT" class="sb-item"><span class="sb-icon">📋</span><span class="sb-label">Intraday BT</span></a>
+    <a href="/backtest3.html" data-tip="Backtest" class="sb-item"><span class="sb-icon">📊</span><span class="sb-label">Backtest</span></a>
+    <a href="/rules.html" data-tip="Rules" class="sb-item"><span class="sb-icon">⚙</span><span class="sb-label">Rules</span></a>
+    <a href="/optimize.html" data-tip="Optimizer" class="sb-item active"><span class="sb-icon">🔬</span><span class="sb-label">Optimizer</span></a>
   </nav>
   <div class="sb-bottom">
     <div class="theme-toggle">
