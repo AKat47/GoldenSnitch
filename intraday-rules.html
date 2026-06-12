@@ -71,6 +71,44 @@ button{font-family:var(--font);cursor:pointer;border:0;background:transparent;co
 }
 .rule-pill.off{background:var(--bg3);color:var(--txt3);}
 
+/* Priority number + weight badge */
+.prio-num{
+  width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  display:inline-grid;place-items:center;
+  background:var(--bg3);color:var(--txt2);
+  font-size:11px;font-weight:800;font-family:var(--mono);
+}
+.weight-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;
+  font-family:var(--mono);background:var(--gold-dim);color:var(--gold);
+  margin-left:8px;
+}
+.mandatory-badge{
+  display:inline-flex;padding:3px 8px;border-radius:999px;
+  font-size:10px;font-weight:800;letter-spacing:.05em;
+  background:var(--red-dim);color:var(--red);margin-left:8px;
+}
+.confirm-badge{
+  display:inline-flex;padding:3px 8px;border-radius:999px;
+  font-size:10px;font-weight:800;letter-spacing:.05em;
+  background:var(--blue-dim);color:var(--blue);margin-left:8px;
+}
+.formula{
+  margin-top:8px;padding:10px 14px;border-radius:8px;
+  background:var(--bg3);font-family:var(--mono);font-size:11.5px;
+  color:var(--txt2);line-height:1.7;white-space:pre-line;
+}
+/* Score legend */
+.legend-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:28px;}
+.legend-chip{
+  display:flex;align-items:center;gap:8px;padding:8px 16px;
+  border-radius:var(--r);font-size:12.5px;font-weight:700;
+}
+.legend-chip.strong{background:var(--green-dim);color:var(--green);}
+.legend-chip.watch {background:var(--gold-dim);color:var(--gold);}
+.legend-chip.hide  {background:var(--bg3);color:var(--txt3);}
+
 /* ── Rule card ─── */
 .rule-card{
   background:var(--bg2);border:1.5px solid var(--border);
@@ -271,39 +309,137 @@ body.sb-collapsed .main{margin-left:52px!important;}
 <main class="main">
 
   <div class="page-header">
-    <h1>⚡ Intraday Scan Rules</h1>
-    <p class="page-sub">Toggle which conditions must be satisfied for a BUY signal. Saved locally and applied immediately on the Intraday Scanner page — no need to re-scan.</p>
+    <h1>⚡ Momentum Scanner Rules</h1>
+    <p class="page-sub">Configures the Live 5-Min Intraday Momentum Scanner. Priority: <strong>Volume → VWAP → Relative Strength → ORB → EMA Trend → RSI</strong>.<br>
+    This page identifies momentum candidates only — it never decides BUY. Entry happens separately: pullback to EMA9/VWAP + 5-min candle confirmation (the State column on the scanner).</p>
   </div>
 
   <!-- Summary -->
   <div class="summary-bar" id="summaryBar">
     <strong>Active rules:</strong>
     <span id="summaryPills"></span>
+    <span style="margin-left:auto">Active weight: <strong id="totalWeight">100</strong>/100</span>
   </div>
 
-  <!-- Rule: Price > VWAP -->
-  <div class="rule-card" id="vwapCard">
+  <!-- Score legend -->
+  <div class="legend-row">
+    <div class="legend-chip strong">🔥 STRONG — score ≥ 80 — momentum active now</div>
+    <div class="legend-chip watch">👀 WATCH — 70-79 — prepare entry</div>
+    <div class="legend-chip hide">&lt; 70 — hidden</div>
+  </div>
+
+  <!-- 1. Volume Momentum — 25 pts -->
+  <div class="rule-card" id="volCard">
     <div class="rule-header">
-      <div class="rule-icon blue">📍</div>
+      <div class="prio-num">1</div>
+      <div class="rule-icon green">📊</div>
       <div class="rule-meta">
-        <div class="rule-name">Price Above VWAP</div>
-        <div class="rule-desc">Current price (LTP) must be above the session VWAP. VWAP acts as the institutional fair-value anchor — stocks trading above it have bullish intraday bias.</div>
-        <div class="rule-current" id="vwapCurrent">LTP &gt; VWAP</div>
+        <div class="rule-name">Volume Momentum<span class="weight-badge">25 pts</span></div>
+        <div class="rule-desc">Highest priority — institutions leave volume footprints. Candles below 1.5× average are rejected outright (hard gate).</div>
+        <div class="formula">relativeVolume = current 5m volume ÷ avg previous 20 candles
+≥ 3× — exceptional · ≥ 2× — valid breakout (+25) · ≥ 1.5× (+15) · &lt; 1.5× — reject</div>
+        <div class="rule-current" id="volCurrent">Vol ≥ 2.0× avg</div>
       </div>
       <div class="toggle-wrap">
-        <button class="toggle" id="vwapToggle" onclick="toggleRule('vwap')"></button>
+        <button class="toggle" id="volToggle" onclick="toggleRule('vol')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="volConfig">
+      <div class="config-label">Valid-breakout multiplier (full 25 pts)</div>
+      <div class="slider-row">
+        <input class="slider" id="volSlider" type="range" min="1.5" max="5.0" step="0.5" value="2.0"
+          oninput="onVolSlider(this.value)">
+        <div class="slider-val" id="volVal">2.0×</div>
+      </div>
+      <div class="opt-row">
+        <button class="opt-btn active" onclick="setVol(2.0)">2.0× — valid</button>
+        <button class="opt-btn" onclick="setVol(3.0)">3.0× — exceptional</button>
+        <button class="opt-btn" onclick="setVol(4.0)">4.0× — extreme</button>
       </div>
     </div>
   </div>
 
-  <!-- Rule: EMA Crossover -->
+  <!-- 2. VWAP Direction — 20 pts, MANDATORY -->
+  <div class="rule-card always-on" id="vwapCard">
+    <div class="rule-header">
+      <div class="prio-num">2</div>
+      <div class="rule-icon blue">📍</div>
+      <div class="rule-meta">
+        <div class="rule-name">VWAP Direction<span class="weight-badge">20 pts</span><span class="mandatory-badge">MANDATORY</span></div>
+        <div class="rule-desc">VWAP is the institutional fair-value anchor. Long setups below VWAP and short setups above VWAP are rejected — this gate cannot be disabled.</div>
+        <div class="formula">VWAP = Σ(price × volume) ÷ Σ(volume)   (session cumulative)
+Bull: price &gt; VWAP · Bear: price &lt; VWAP</div>
+        <div class="rule-current on" id="vwapCurrent">Bull: LTP &gt; VWAP · Bear: LTP &lt; VWAP</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle always" id="vwapToggle" title="Mandatory — cannot be disabled"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Relative Strength vs NIFTY — 20 pts -->
+  <div class="rule-card" id="rsCard">
+    <div class="rule-header">
+      <div class="prio-num">3</div>
+      <div class="rule-icon gold">🏆</div>
+      <div class="rule-meta">
+        <div class="rule-name">Relative Strength vs NIFTY<span class="weight-badge">20 pts</span></div>
+        <div class="rule-desc">Stock must outperform NIFTY intraday — leadership confirms smart money is flowing into this name, not just riding the index.</div>
+        <div class="formula">stockMove = (LTP − Open) ÷ Open × 100
+niftyMove = (NIFTY − NIFTY Open) ÷ NIFTY Open × 100
+relativeStrength = stockMove − niftyMove
+Bull: RS ≥ +0.5% · Bear: RS ≤ −0.5%</div>
+        <div class="rule-current" id="rsCurrent">|RS| ≥ 0.5%</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="rsToggle" onclick="toggleRule('rs')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="rsConfig">
+      <div class="config-label">Minimum relative strength (±%)</div>
+      <div class="slider-row">
+        <input class="slider" id="rsSlider" type="range" min="0.1" max="2.0" step="0.1" value="0.5"
+          oninput="onRsSlider(this.value)">
+        <div class="slider-val" id="rsVal">0.5%</div>
+      </div>
+      <div class="opt-row">
+        <button class="opt-btn" onclick="setRs(0.3)">0.3% — loose</button>
+        <button class="opt-btn active" onclick="setRs(0.5)">0.5% — default</button>
+        <button class="opt-btn" onclick="setRs(1.0)">1.0% — leader</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Opening Range Breakout — 20 pts -->
+  <div class="rule-card" id="orbCard">
+    <div class="rule-header">
+      <div class="prio-num">4</div>
+      <div class="rule-icon orange">🚀</div>
+      <div class="rule-meta">
+        <div class="rule-name">Opening Range Breakout<span class="weight-badge">20 pts</span></div>
+        <div class="rule-desc">Tracks the first 15-minute range (09:15–09:30 IST) and stores ORB High / ORB Low. A break of the range with a volume spike is the most reliable intraday trigger.</div>
+        <div class="formula">ORB High / ORB Low = high / low of 09:15–09:30 candles
+Bull: LTP &gt; ORB High · Bear: LTP &lt; ORB Low
+Confirmation: volume spike required (≥ 2× avg)</div>
+        <div class="rule-current" id="orbCurrent">Break of 15-min range + volume</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="orbToggle" onclick="toggleRule('orb')"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. EMA Trend Alignment — 10 pts -->
   <div class="rule-card" id="emaCard">
     <div class="rule-header">
-      <div class="rule-icon gold">〰</div>
+      <div class="prio-num">5</div>
+      <div class="rule-icon purple">〰</div>
       <div class="rule-meta">
-        <div class="rule-name">EMA 9 &gt; EMA 21</div>
-        <div class="rule-desc">9-period EMA must be above 21-period EMA on the 5-minute chart. This short-term crossover confirms bullish momentum on the intraday timeframe.</div>
-        <div class="rule-current" id="emaCurrent">EMA9 &gt; EMA21</div>
+        <div class="rule-name">EMA Trend Alignment<span class="weight-badge">10 pts</span><span class="confirm-badge">CONFIRMATION ONLY</span></div>
+        <div class="rule-desc">Full EMA stack alignment on the 5-min chart. Replaces the old EMA9 &gt; EMA21 crossover rule — a crossover alone is never an entry signal here.</div>
+        <div class="formula">Bull: Price &gt; EMA9 &gt; EMA21 &gt; EMA50
+Bear: Price &lt; EMA9 &lt; EMA21 &lt; EMA50</div>
+        <div class="rule-current" id="emaCurrent">Full stack alignment</div>
       </div>
       <div class="toggle-wrap">
         <button class="toggle" id="emaToggle" onclick="toggleRule('ema')"></button>
@@ -311,13 +447,53 @@ body.sb-collapsed .main{margin-left:52px!important;}
     </div>
   </div>
 
-  <!-- Rule: ADX -->
+  <!-- 6. RSI Zone — 5 pts -->
+  <div class="rule-card" id="rsiCard">
+    <div class="rule-header">
+      <div class="prio-num">6</div>
+      <div class="rule-icon red">〽</div>
+      <div class="rule-meta">
+        <div class="rule-name">RSI Zone<span class="weight-badge">5 pts</span></div>
+        <div class="rule-desc">RSI(14) on the 5-min chart must show momentum without exhaustion. RSI &gt; 80 or &lt; 20 is always rejected regardless of this toggle.</div>
+        <div class="formula">Bull: 50 ≤ RSI ≤ 70 · Bear: 30 ≤ RSI ≤ 50
+Hard reject: RSI &gt; 80 or RSI &lt; 20</div>
+        <div class="rule-current" id="rsiCurrent">Bull 50–70 · Bear 30–50</div>
+      </div>
+      <div class="toggle-wrap">
+        <button class="toggle" id="rsiToggle" onclick="toggleRule('rsi')"></button>
+      </div>
+    </div>
+    <div class="rule-config" id="rsiConfig">
+      <div class="two-slider-row">
+        <div>
+          <div class="config-label">Bull RSI minimum</div>
+          <div class="slider-row">
+            <input class="slider" id="rsiMinSlider" type="range" min="40" max="60" step="1" value="50"
+              oninput="onRsiMinSlider(this.value)">
+            <div class="slider-val" id="rsiMinVal">50</div>
+          </div>
+        </div>
+        <div>
+          <div class="config-label">Bull RSI maximum</div>
+          <div class="slider-row">
+            <input class="slider" id="rsiMaxSlider" type="range" min="60" max="80" step="1" value="70"
+              oninput="onRsiMaxSlider(this.value)">
+            <div class="slider-val" id="rsiMaxVal">70</div>
+          </div>
+        </div>
+      </div>
+      <div class="slider-hint">Bear zone mirrors automatically: <span id="rsiBearHint" class="mono">30–50</span></div>
+    </div>
+  </div>
+
+  <!-- ADX — OFF by default -->
   <div class="rule-card" id="adxCard">
     <div class="rule-header">
+      <div class="prio-num">—</div>
       <div class="rule-icon orange">📈</div>
       <div class="rule-meta">
-        <div class="rule-name">ADX — Trend Strength</div>
-        <div class="rule-desc">ADX (14-period, 5-min chart) must exceed a threshold. Filters out sideways or choppy price action where breakouts tend to fail.</div>
+        <div class="rule-name">ADX — Trend Strength<span class="weight-badge" style="background:var(--bg3);color:var(--txt3)">0 pts</span></div>
+        <div class="rule-desc">Disabled by default — ADX is lagging on 5-minute intraday charts and reacts after the move has already happened. Volume + VWAP + RS cover trend quality faster.</div>
         <div class="rule-current" id="adxCurrent">ADX &gt; 25</div>
       </div>
       <div class="toggle-wrap">
@@ -331,179 +507,14 @@ body.sb-collapsed .main{margin-left:52px!important;}
           oninput="onAdxSlider(this.value)">
         <div class="slider-val" id="adxVal">25</div>
       </div>
-      <div class="opt-row">
-        <button class="opt-btn" onclick="setAdx(20)">20 — trending</button>
-        <button class="opt-btn active" onclick="setAdx(25)">25 — strong</button>
-        <button class="opt-btn" onclick="setAdx(30)">30 — very strong</button>
-        <button class="opt-btn" onclick="setAdx(40)">40 — extreme</button>
-      </div>
     </div>
   </div>
 
-  <!-- Rule: RSI -->
-  <div class="rule-card" id="rsiCard">
-    <div class="rule-header">
-      <div class="rule-icon purple">〽</div>
-      <div class="rule-meta">
-        <div class="rule-name">RSI Range</div>
-        <div class="rule-desc">RSI (14-period, 5-min chart) must be within a range. This catches stocks with momentum (above 50) but not overbought (below 75). Adjust to be more or less selective.</div>
-        <div class="rule-current" id="rsiCurrent">55 ≤ RSI ≤ 70</div>
-      </div>
-      <div class="toggle-wrap">
-        <button class="toggle" id="rsiToggle" onclick="toggleRule('rsi')"></button>
-      </div>
-    </div>
-    <div class="rule-config" id="rsiConfig">
-      <div class="two-slider-row">
-        <div>
-          <div class="config-label">RSI Minimum</div>
-          <div class="slider-row">
-            <input class="slider" id="rsiMinSlider" type="range" min="40" max="70" step="1" value="55"
-              oninput="onRsiMinSlider(this.value)">
-            <div class="slider-val" id="rsiMinVal">55</div>
-          </div>
-          <div class="opt-row">
-            <button class="opt-btn" onclick="setRsiMin(50)">50</button>
-            <button class="opt-btn active" onclick="setRsiMin(55)">55</button>
-            <button class="opt-btn" onclick="setRsiMin(60)">60</button>
-          </div>
-        </div>
-        <div>
-          <div class="config-label">RSI Maximum</div>
-          <div class="slider-row">
-            <input class="slider" id="rsiMaxSlider" type="range" min="60" max="85" step="1" value="70"
-              oninput="onRsiMaxSlider(this.value)">
-            <div class="slider-val" id="rsiMaxVal">70</div>
-          </div>
-          <div class="opt-row">
-            <button class="opt-btn" onclick="setRsiMax(65)">65</button>
-            <button class="opt-btn active" onclick="setRsiMax(70)">70</button>
-            <button class="opt-btn" onclick="setRsiMax(75)">75</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rule: Volume Surge -->
-  <div class="rule-card" id="volCard">
-    <div class="rule-header">
-      <div class="rule-icon green">📊</div>
-      <div class="rule-meta">
-        <div class="rule-name">Volume Surge</div>
-        <div class="rule-desc">Current 5-min candle volume must be above N× the average of the last 20 candles. Confirms the move is backed by real participation, not a thin market move.</div>
-        <div class="rule-current" id="volCurrent">Vol &gt; 2.0× avg</div>
-      </div>
-      <div class="toggle-wrap">
-        <button class="toggle" id="volToggle" onclick="toggleRule('vol')"></button>
-      </div>
-    </div>
-    <div class="rule-config" id="volConfig">
-      <div class="config-label">Minimum volume multiplier vs 20-candle avg</div>
-      <div class="slider-row">
-        <input class="slider" id="volSlider" type="range" min="1.0" max="5.0" step="0.5" value="2.0"
-          oninput="onVolSlider(this.value)">
-        <div class="slider-val" id="volVal">2.0×</div>
-      </div>
-      <div class="opt-row">
-        <button class="opt-btn" onclick="setVol(1.5)">1.5× — moderate</button>
-        <button class="opt-btn active" onclick="setVol(2.0)">2.0× — strong</button>
-        <button class="opt-btn" onclick="setVol(3.0)">3.0× — very strong</button>
-        <button class="opt-btn" onclick="setVol(4.0)">4.0× — extreme</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rule: Time Window -->
-  <div class="rule-card" id="timeCard">
-    <div class="rule-header">
-      <div class="rule-icon blue">🕐</div>
-      <div class="rule-meta">
-        <div class="rule-name">Trading Time Window</div>
-        <div class="rule-desc">Only generate BUY signals within the defined IST time window. Avoids the volatile opening and the illiquid close — default is 9:30 AM to 2:45 PM.</div>
-        <div class="rule-current" id="timeCurrent">9:30 – 14:45 IST</div>
-      </div>
-      <div class="toggle-wrap">
-        <button class="toggle" id="timeToggle" onclick="toggleRule('time')"></button>
-      </div>
-    </div>
-    <div class="rule-config" id="timeConfig">
-      <div class="two-slider-row">
-        <div>
-          <div class="config-label">Start time (IST)</div>
-          <div class="slider-row">
-            <input class="slider" id="timeStartSlider" type="range" min="570" max="630" step="5" value="570"
-              oninput="onTimeStartSlider(this.value)">
-            <div class="slider-val" id="timeStartVal" style="font-size:14px">9:30</div>
-          </div>
-          <div class="opt-row">
-            <button class="opt-btn active" onclick="setTimeStart(570)">9:30</button>
-            <button class="opt-btn" onclick="setTimeStart(585)">9:45</button>
-            <button class="opt-btn" onclick="setTimeStart(600)">10:00</button>
-          </div>
-        </div>
-        <div>
-          <div class="config-label">End time (IST)</div>
-          <div class="slider-row">
-            <input class="slider" id="timeEndSlider" type="range" min="780" max="930" step="5" value="885"
-              oninput="onTimeEndSlider(this.value)">
-            <div class="slider-val" id="timeEndVal" style="font-size:14px">14:45</div>
-          </div>
-          <div class="opt-row">
-            <button class="opt-btn" onclick="setTimeEnd(840)">14:00</button>
-            <button class="opt-btn active" onclick="setTimeEnd(885)">14:45</button>
-            <button class="opt-btn" onclick="setTimeEnd(900)">15:00</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rule: Gap Filter -->
-  <div class="rule-card" id="gapCard">
-    <div class="rule-header">
-      <div class="rule-icon red">↕</div>
-      <div class="rule-meta">
-        <div class="rule-name">Gap Filter</div>
-        <div class="rule-desc">Excludes stocks that gapped up too aggressively or gapped down at the open vs previous close. Avoids chasing or fading extreme opens.</div>
-        <div class="rule-current" id="gapCurrent">−2% ≤ Gap ≤ +3%</div>
-      </div>
-      <div class="toggle-wrap">
-        <button class="toggle" id="gapToggle" onclick="toggleRule('gap')"></button>
-      </div>
-    </div>
-    <div class="rule-config" id="gapConfig">
-      <div class="two-slider-row">
-        <div>
-          <div class="config-label">Max gap down (%)</div>
-          <div class="slider-row">
-            <input class="slider" id="gapDownSlider" type="range" min="-8" max="0" step="0.5" value="-2"
-              oninput="onGapDownSlider(this.value)">
-            <div class="slider-val" id="gapDownVal" style="font-size:15px">−2%</div>
-          </div>
-          <div class="opt-row">
-            <button class="opt-btn" onclick="setGapDown(-5)">−5%</button>
-            <button class="opt-btn" onclick="setGapDown(-3)">−3%</button>
-            <button class="opt-btn active" onclick="setGapDown(-2)">−2%</button>
-            <button class="opt-btn" onclick="setGapDown(-1)">−1%</button>
-          </div>
-        </div>
-        <div>
-          <div class="config-label">Max gap up (%)</div>
-          <div class="slider-row">
-            <input class="slider" id="gapUpSlider" type="range" min="0" max="8" step="0.5" value="3"
-              oninput="onGapUpSlider(this.value)">
-            <div class="slider-val" id="gapUpVal" style="font-size:15px">+3%</div>
-          </div>
-          <div class="opt-row">
-            <button class="opt-btn" onclick="setGapUp(2)">+2%</button>
-            <button class="opt-btn active" onclick="setGapUp(3)">+3%</button>
-            <button class="opt-btn" onclick="setGapUp(5)">+5%</button>
-            <button class="opt-btn" onclick="setGapUp(8)">+8%</button>
-          </div>
-        </div>
-      </div>
-    </div>
+  <!-- Entry note -->
+  <div class="info-box" style="margin-top:24px">
+    ⚠️ These rules only identify momentum candidates — they never generate a BUY on their own.
+    Entry is a separate state machine on the scanner: DETECTED → pullback to EMA9 / VWAP → 5-min candle
+    confirmation (break of previous candle high/low) → TRIGGER.
   </div>
 
   <!-- Save -->
@@ -527,15 +538,16 @@ function applyTheme(t) {
 document.querySelectorAll('.theme-btn').forEach(b => b.onclick = () => applyTheme(b.dataset.t));
 applyTheme(localStorage.getItem('gc_theme') || 'light');
 
-// ── Defaults ────────────────────────
+// ── Defaults (Momentum Scanner v3) ──
 const DEFAULTS = {
-  requireVWAP:  true,
-  requireEMA:   true,
-  requireADX:   true,  adxMin:     25,
-  requireRSI:   true,  rsiMin:     55,  rsiMax: 70,
-  requireVol:   true,  volMult:    2.0,
-  requireTime:  true,  timeStart:  570, timeEnd: 885,  // 9:30, 14:45
-  requireGap:   true,  gapDown:   -2,   gapUp:   3,
+  version: 3,
+  requireVol:  true,  volMult: 2.0,   // 25 pts — hard gate at 1.5×
+  requireVWAP: true,                  // 20 pts — mandatory, cannot disable
+  requireRS:   true,  rsThresh: 0.5,  // 20 pts
+  requireORB:  true,                  // 20 pts
+  requireEMA:  true,                  // 10 pts — trend alignment, confirmation only
+  requireRSI:  true,  rsiMin: 50, rsiMax: 70,  // 5 pts — bear zone mirrors
+  requireADX:  false, adxMin: 25,     // OFF — lagging on 5-min charts
 };
 
 let rules = { ...DEFAULTS };
@@ -544,32 +556,29 @@ let rules = { ...DEFAULTS };
 function loadRules() {
   try {
     const saved = localStorage.getItem('gc_intraday_rules');
-    if (saved) rules = { ...DEFAULTS, ...JSON.parse(saved) };
+    if (saved) {
+      const p = JSON.parse(saved);
+      // Migrate pre-v3 (Golden Cross era) configs to momentum defaults
+      rules = p.version === 3 ? { ...DEFAULTS, ...p } : { ...DEFAULTS };
+    }
   } catch(e) {}
+  rules.requireVWAP = true; // mandatory, always
 }
 
-// ── Map key → display name ────────────
-const NAMES = {
-  vwap: 'VWAP', ema: 'EMA', adx: 'ADX', rsi: 'RSI',
-  vol: 'Volume', time: 'Time', gap: 'Gap',
-};
-const KEYS = ['vwap','ema','adx','rsi','vol','time','gap'];
-const ON_KEY = { vwap:'requireVWAP', ema:'requireEMA', adx:'requireADX', rsi:'requireRSI', vol:'requireVol', time:'requireTime', gap:'requireGap' };
+// ── Keys / names / weights ───────────
+const NAMES   = { vol:'Volume', vwap:'VWAP', rs:'Rel Strength', orb:'ORB', ema:'EMA Trend', rsi:'RSI', adx:'ADX' };
+const KEYS    = ['vol','vwap','rs','orb','ema','rsi','adx'];
+const ON_KEY  = { vol:'requireVol', vwap:'requireVWAP', rs:'requireRS', orb:'requireORB', ema:'requireEMA', rsi:'requireRSI', adx:'requireADX' };
+const WEIGHTS = { vol:25, vwap:20, rs:20, orb:20, ema:10, rsi:5, adx:0 };
 
 // ── Apply to UI ──────────────────────
 function applyToUI() {
   KEYS.forEach(k => setToggle(k, rules[ON_KEY[k]]));
-
-  // Sliders
-  setAdxUI(rules.adxMin);
+  setVolUI(rules.volMult);
+  setRsUI(rules.rsThresh);
   setRsiMinUI(rules.rsiMin);
   setRsiMaxUI(rules.rsiMax);
-  setVolUI(rules.volMult);
-  setTimeStartUI(rules.timeStart);
-  setTimeEndUI(rules.timeEnd);
-  setGapDownUI(rules.gapDown);
-  setGapUpUI(rules.gapUp);
-
+  setAdxUI(rules.adxMin);
   updateSummary();
 }
 
@@ -577,26 +586,28 @@ function setToggle(key, on) {
   const btn  = document.getElementById(key + 'Toggle');
   const conf = document.getElementById(key + 'Config');
   const card = document.getElementById(key + 'Card');
-  btn.classList.toggle('on', on);
+  if (key !== 'vwap') btn.classList.toggle('on', on);
   if (conf) conf.classList.toggle('visible', on);
-  card.classList.toggle('enabled', on);
+  if (key !== 'vwap') card.classList.toggle('enabled', on);
   updateCurrentBadge(key);
 }
 
 function toggleRule(key) {
+  if (key === 'vwap') return; // mandatory
   rules[ON_KEY[key]] = !rules[ON_KEY[key]];
   setToggle(key, rules[ON_KEY[key]]);
   updateSummary();
 }
 
-// ── Summary pills ────────────────────
+// ── Summary pills + total weight ─────
 function updateSummary() {
   const pills = KEYS.map(k => {
     const on = rules[ON_KEY[k]];
-    return `<span class="rule-pill ${on?'':'off'}">${NAMES[k]}</span>`;
+    return `<span class="rule-pill ${on?'':'off'}">${NAMES[k]}${WEIGHTS[k]?' '+WEIGHTS[k]:''}</span>`;
   }).join('');
-  const count = KEYS.filter(k => rules[ON_KEY[k]]).length;
   document.getElementById('summaryPills').innerHTML = pills;
+  const total = KEYS.reduce((s,k) => s + (rules[ON_KEY[k]] ? WEIGHTS[k] : 0), 0);
+  document.getElementById('totalWeight').textContent = total;
 }
 
 // ── "Current" badge text ─────────────
@@ -605,102 +616,66 @@ function updateCurrentBadge(key) {
   const el = document.getElementById(key + 'Current');
   if (!el) return;
   el.className = 'rule-current' + (on ? ' on' : '');
+  const bearMin = 100 - rules.rsiMax, bearMax = 100 - rules.rsiMin;
   const texts = {
-    vwap: 'LTP > VWAP',
-    ema:  'EMA9 > EMA21',
+    vol:  `Vol ≥ ${rules.volMult.toFixed(1)}× avg (reject < 1.5×)`,
+    vwap: 'Bull: LTP > VWAP · Bear: LTP < VWAP',
+    rs:   `|RS| ≥ ${rules.rsThresh.toFixed(1)}%`,
+    orb:  'Break of 15-min range + volume',
+    ema:  'Price > EMA9 > EMA21 > EMA50 (or mirrored)',
+    rsi:  `Bull ${rules.rsiMin}–${rules.rsiMax} · Bear ${bearMin}–${bearMax}`,
     adx:  `ADX > ${rules.adxMin}`,
-    rsi:  `${rules.rsiMin} ≤ RSI ≤ ${rules.rsiMax}`,
-    vol:  `Vol > ${rules.volMult.toFixed(1)}× avg`,
-    time: `${minsToTime(rules.timeStart)} – ${minsToTime(rules.timeEnd)} IST`,
-    gap:  `${rules.gapDown}% ≤ Gap ≤ +${rules.gapUp}%`,
   };
   el.textContent = texts[key] || '';
+  if (key === 'rsi') {
+    const hint = document.getElementById('rsiBearHint');
+    if (hint) hint.textContent = `${bearMin}–${bearMax}`;
+  }
 }
 
-function minsToTime(m) {
-  const h = Math.floor(m/60), mm = m % 60;
-  return `${h}:${String(mm).padStart(2,'0')}`;
+// ── Volume ───────────────────────────
+function setVolUI(v) {
+  document.getElementById('volSlider').value = v;
+  document.getElementById('volVal').textContent = parseFloat(v).toFixed(1) + '×';
+  updateSliderBg('volSlider', v, 1.5, 5.0);
+  document.querySelectorAll('#volConfig .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.textContent) === parseFloat(v)));
 }
+function onVolSlider(v) { rules.volMult = parseFloat(v); setVolUI(v); updateCurrentBadge('vol'); }
+function setVol(v)      { rules.volMult = v; setVolUI(v); updateCurrentBadge('vol'); }
+
+// ── Relative Strength ────────────────
+function setRsUI(v) {
+  document.getElementById('rsSlider').value = v;
+  document.getElementById('rsVal').textContent = parseFloat(v).toFixed(1) + '%';
+  updateSliderBg('rsSlider', v, 0.1, 2.0);
+  document.querySelectorAll('#rsConfig .opt-btn').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.textContent) === parseFloat(v)));
+}
+function onRsSlider(v) { rules.rsThresh = parseFloat(v); setRsUI(v); updateCurrentBadge('rs'); }
+function setRs(v)      { rules.rsThresh = v; setRsUI(v); updateCurrentBadge('rs'); }
+
+// ── RSI (bull zone; bear mirrors) ────
+function setRsiMinUI(v) {
+  document.getElementById('rsiMinSlider').value = v;
+  document.getElementById('rsiMinVal').textContent = v;
+  updateSliderBg('rsiMinSlider', v, 40, 60);
+}
+function setRsiMaxUI(v) {
+  document.getElementById('rsiMaxSlider').value = v;
+  document.getElementById('rsiMaxVal').textContent = v;
+  updateSliderBg('rsiMaxSlider', v, 60, 80);
+}
+function onRsiMinSlider(v) { rules.rsiMin = parseInt(v); setRsiMinUI(v); updateCurrentBadge('rsi'); }
+function onRsiMaxSlider(v) { rules.rsiMax = parseInt(v); setRsiMaxUI(v); updateCurrentBadge('rsi'); }
 
 // ── ADX ──────────────────────────────
 function setAdxUI(v) {
   document.getElementById('adxSlider').value = v;
   document.getElementById('adxVal').textContent = v;
   updateSliderBg('adxSlider', v, 15, 50);
-  document.querySelectorAll('#adxConfig .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseInt(b.textContent) === parseInt(v)));
 }
 function onAdxSlider(v) { rules.adxMin = parseInt(v); setAdxUI(v); updateCurrentBadge('adx'); }
-function setAdx(v)       { rules.adxMin = v; setAdxUI(v); updateCurrentBadge('adx'); }
-
-// ── RSI ──────────────────────────────
-function setRsiMinUI(v) {
-  document.getElementById('rsiMinSlider').value = v;
-  document.getElementById('rsiMinVal').textContent = v;
-  updateSliderBg('rsiMinSlider', v, 40, 70);
-  document.querySelectorAll('#rsiConfig div:first-child .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseInt(b.textContent) === parseInt(v)));
-}
-function setRsiMaxUI(v) {
-  document.getElementById('rsiMaxSlider').value = v;
-  document.getElementById('rsiMaxVal').textContent = v;
-  updateSliderBg('rsiMaxSlider', v, 60, 85);
-  document.querySelectorAll('#rsiConfig div:last-child .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseInt(b.textContent) === parseInt(v)));
-}
-function onRsiMinSlider(v) { rules.rsiMin = parseInt(v); setRsiMinUI(v); updateCurrentBadge('rsi'); }
-function onRsiMaxSlider(v) { rules.rsiMax = parseInt(v); setRsiMaxUI(v); updateCurrentBadge('rsi'); }
-function setRsiMin(v)       { rules.rsiMin = v; setRsiMinUI(v); updateCurrentBadge('rsi'); }
-function setRsiMax(v)       { rules.rsiMax = v; setRsiMaxUI(v); updateCurrentBadge('rsi'); }
-
-// ── Volume ───────────────────────────
-function setVolUI(v) {
-  document.getElementById('volSlider').value = v;
-  document.getElementById('volVal').textContent = parseFloat(v).toFixed(1) + '×';
-  updateSliderBg('volSlider', v, 1.0, 5.0);
-  document.querySelectorAll('#volConfig .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseFloat(b.textContent) === parseFloat(v)));
-}
-function onVolSlider(v) { rules.volMult = parseFloat(v); setVolUI(v); updateCurrentBadge('vol'); }
-function setVol(v)       { rules.volMult = v; setVolUI(v); updateCurrentBadge('vol'); }
-
-// ── Time ─────────────────────────────
-function setTimeStartUI(v) {
-  document.getElementById('timeStartSlider').value = v;
-  document.getElementById('timeStartVal').textContent = minsToTime(v);
-  updateSliderBg('timeStartSlider', v, 570, 630);
-  document.querySelectorAll('#timeConfig div:first-child .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseInt(b.onclick?.toString().match(/\d+/)?.[0]) === parseInt(v)));
-}
-function setTimeEndUI(v) {
-  document.getElementById('timeEndSlider').value = v;
-  document.getElementById('timeEndVal').textContent = minsToTime(v);
-  updateSliderBg('timeEndSlider', v, 780, 930);
-}
-function onTimeStartSlider(v) { rules.timeStart = parseInt(v); setTimeStartUI(v); updateCurrentBadge('time'); }
-function onTimeEndSlider(v)   { rules.timeEnd   = parseInt(v); setTimeEndUI(v);   updateCurrentBadge('time'); }
-function setTimeStart(v) { rules.timeStart = v; setTimeStartUI(v); updateCurrentBadge('time'); document.querySelectorAll('#timeConfig div:first-child .opt-btn').forEach(b=>{const m=b.onclick?.toString().match(/\d+/)?.[0];b.classList.toggle('active',parseInt(m)===v);}); }
-function setTimeEnd(v)   { rules.timeEnd   = v; setTimeEndUI(v);   updateCurrentBadge('time'); document.querySelectorAll('#timeConfig div:last-child .opt-btn').forEach(b=>{const m=b.onclick?.toString().match(/\d+/)?.[0];b.classList.toggle('active',parseInt(m)===v);}); }
-
-// ── Gap ──────────────────────────────
-function setGapDownUI(v) {
-  document.getElementById('gapDownSlider').value = v;
-  document.getElementById('gapDownVal').textContent = (v < 0 ? '−' : '+') + Math.abs(v) + '%';
-  updateSliderBg('gapDownSlider', v - (-8), 0, 8);  // invert for visual
-  document.querySelectorAll('#gapConfig div:first-child .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseFloat(b.onclick?.toString().match(/-?\d+(\.\d+)?/)?.[0]) === parseFloat(v)));
-}
-function setGapUpUI(v) {
-  document.getElementById('gapUpSlider').value = v;
-  document.getElementById('gapUpVal').textContent = '+' + v + '%';
-  updateSliderBg('gapUpSlider', v, 0, 8);
-  document.querySelectorAll('#gapConfig div:last-child .opt-btn').forEach(b =>
-    b.classList.toggle('active', parseFloat(b.onclick?.toString().match(/-?\d+(\.\d+)?/)?.[0]) === parseFloat(v)));
-}
-function onGapDownSlider(v) { rules.gapDown = parseFloat(v); setGapDownUI(v); updateCurrentBadge('gap'); }
-function onGapUpSlider(v)   { rules.gapUp   = parseFloat(v); setGapUpUI(v);   updateCurrentBadge('gap'); }
-function setGapDown(v) { rules.gapDown = v; setGapDownUI(v); updateCurrentBadge('gap'); }
-function setGapUp(v)   { rules.gapUp   = v; setGapUpUI(v);   updateCurrentBadge('gap'); }
 
 // ── Slider gradient helper ────────────
 function updateSliderBg(id, val, min, max) {
