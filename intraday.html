@@ -192,6 +192,11 @@ tr.buy-row td:first-child{border-left:3px solid var(--green);}
 .orb-badge.breakout {background:var(--green-dim);color:var(--green);}
 .orb-badge.breakdown{background:var(--red-dim);color:var(--red);}
 .orb-badge.inside   {background:var(--bg3);color:var(--txt3);}
+.state-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:999px;font-size:10.5px;font-weight:800;}
+.state-badge.trigger {background:var(--green-dim);color:var(--green);box-shadow:0 0 0 1px var(--green);}
+.state-badge.trigger.sell{background:var(--red-dim);color:var(--red);box-shadow:0 0 0 1px var(--red);}
+.state-badge.waiting {background:var(--gold-dim);color:var(--gold);}
+.state-badge.detected{background:var(--bg3);color:var(--txt3);}
 .score-bar-wrap{display:inline-flex;align-items:center;gap:5px;}
 .score-bar{width:36px;height:4px;background:var(--bg3);border-radius:99px;overflow:hidden;flex-shrink:0;}
 .score-bar-fill{height:100%;border-radius:99px;}
@@ -347,7 +352,7 @@ body.sb-collapsed .main{margin-left:52px!important;}
       <span>Step 2 — Live 5-Min Scanner</span>
       <span class="phase-badge" id="p2Badge">Waiting</span>
     </div>
-    <div class="phase-sub">Momentum scanner — Volume → VWAP → Relative Strength → ORB → EMA trend. Returns only stocks scoring ≥70 out of 100. STRONG (≥80) = act now, WATCH (70-79) = monitor. Active 09:15–15:30 IST.</div>
+    <div class="phase-sub">Momentum scanner — Volume → VWAP → Relative Strength → ORB → EMA trend. Returns only stocks scoring ≥70 out of 100. STRONG (≥80) = act now, WATCH (70-79) = monitor. 09:15–09:30 = no-trade window (data collection only) · signals from 09:30–15:30 IST. Entry state: DETECTED → WAITING_ENTRY (pullback to EMA9/VWAP) → TRIGGER (break of prev candle) = BUY/SELL.</div>
     <div class="phase-row">
       <button class="action-btn gold" id="scanBtn" onclick="runScan()" disabled>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -356,6 +361,14 @@ body.sb-collapsed .main{margin-left:52px!important;}
       <label class="toggle-row">
         <div class="sw"><input type="checkbox" id="autoToggle" onchange="toggleAuto()"><div class="sw-track"></div></div>
         <span class="auto-label">Auto (every 5 min)</span>
+      </label>
+      <label class="toggle-row">
+        <div class="sw"><input type="checkbox" id="alertToggle" onchange="toggleAlerts()"><div class="sw-track"></div></div>
+        <span class="auto-label">🔔 Alerts</span>
+      </label>
+      <label class="toggle-row">
+        <div class="sw"><input type="checkbox" id="waToggle" onchange="toggleWA()"><div class="sw-track"></div></div>
+        <span class="auto-label">WhatsApp</span>
       </label>
       <div class="stat-chip">Scanned: <span class="val" id="scannedCount">—</span></div>
       <div class="stat-chip">Candles: <span class="val" id="candleInfo">—</span></div>
@@ -401,6 +414,7 @@ body.sb-collapsed .main{margin-left:52px!important;}
             <th>ORB</th>
             <th>Score</th>
             <th>Signal</th>
+            <th>State</th>
             <th>Entry</th>
             <th>SL</th>
             <th>T1 / T2</th>
@@ -579,6 +593,14 @@ async function runScan(){
         body:JSON.stringify({symbols:batches[b],prevCloses,avgDailyVols})
       });
       const j=await resp.json();
+      if(j.ok&&j.noTradeWindow){
+        // 09:15–09:30 IST — opening volatility trap. Collect only, no signals.
+        document.getElementById('p2Badge').className='phase-badge waiting';
+        document.getElementById('p2Badge').textContent='No-trade window';
+        document.getElementById('p2ProgLabel').textContent=j.message||'No-trade window — signals from 09:30';
+        document.getElementById('lastScanTime').textContent=(j.scanTime||'—')+' (no-trade)';
+        break;
+      }
       if(j.ok){
         // Server returns only score >= 70, sorted by score desc — no client-side re-scoring needed
         allSignals.push(...(j.signals||[]));
@@ -606,6 +628,7 @@ async function runScan(){
 
   // Sort final combined list: score desc → volRatio desc
   allSignals.sort((a,b)=>b.score-a.score||b.volRatio-a.volRatio);
+  checkAlerts();
 
   const strongCount=allSignals.filter(r=>r.signalType==='STRONG').length;
   document.getElementById('scannedCount').textContent=symbols.length;
@@ -680,6 +703,7 @@ function renderCards(){
       <div class="sig-row"><span class="sig-row-label">RSI</span><span class="sig-row-val">${s.rsi??'—'}</span></div>
       <div class="sig-row"><span class="sig-row-label">RS vs NIFTY</span><span class="sig-row-val" style="color:${s.rs!=null&&s.rs>0?'var(--green)':s.rs!=null&&s.rs<0?'var(--red)':'var(--txt2)'}">${s.rs!=null?rsSign+s.rs+'%':'—'}</span></div>
       <div class="sig-row"><span class="sig-row-label">ORB</span><span class="orb-badge ${s.orbStatus}">${s.orbStatus}</span></div>
+      <div class="sig-row"><span class="sig-row-label">State</span>${stateBadge(s)}</div>
       <div class="sig-row"><span class="sig-row-label">Score</span><span class="sig-row-val" style="color:${scoreCol}">${s.score}/100</span></div>
       <div class="sig-levels">
         <span class="level-chip entry">E ₹${s.entry}</span>
@@ -711,7 +735,7 @@ function renderTable(){
   if(!rows.length){
     const hint=activeFilter==='strong'?'No STRONG setups yet — try scanning again or check WATCH tab.':
                activeFilter==='watch' ?'No WATCH signals yet.':'No signals yet. Scan during market hours (09:15–15:30 IST).';
-    tbody.innerHTML=`<tr><td colspan="16" style="text-align:center;padding:40px;color:var(--txt3)">${hint}</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="17" style="text-align:center;padding:40px;color:var(--txt3)">${hint}</td></tr>`;
     return;
   }
 
@@ -752,6 +776,7 @@ function renderTable(){
         </div>
       </td>
       <td>${isStrong?`<span class="strong-badge">🔥 STRONG</span>`:`<span class="watch-badge">👀 WATCH</span>`}</td>
+      <td>${stateBadge(r)}</td>
       <td class="mono">₹${r.entry??'—'}</td>
       <td class="mono" style="color:var(--red)">₹${r.sl??'—'}</td>
       <td class="mono" style="color:var(--green)">₹${r.t1??'—'} <span style="opacity:.6">/ ₹${r.t2??'—'}</span></td>
@@ -761,9 +786,67 @@ function renderTable(){
 
 function fmt(n){return n==null?'—':typeof n==='number'?n.toLocaleString('en-IN',{maximumFractionDigits:2}):n;}
 
+function stateBadge(r){
+  if(r.entryState==='TRIGGER')
+    return`<span class="state-badge trigger ${r.tradeSignal==='SELL'?'sell':''}">⚡ ${r.tradeSignal||'TRIGGER'}</span>`;
+  if(r.entryState==='WAITING_ENTRY')
+    return`<span class="state-badge waiting">⏳ PULLBACK</span>`;
+  return`<span class="state-badge detected">◎ DETECTED</span>`;
+}
+
+// ── Alert engine ──────────────────────────────────────────
+// Fires when a NEW symbol crosses score >= 80 (covers WATCH→STRONG).
+// One alert per symbol per day (localStorage dedup).
+let alertsOn=localStorage.getItem('gc_id_alerts')==='1';
+let waOn    =localStorage.getItem('gc_id_wa')==='1';
+function toggleAlerts(){
+  alertsOn=document.getElementById('alertToggle').checked;
+  localStorage.setItem('gc_id_alerts',alertsOn?'1':'0');
+  if(alertsOn&&'Notification'in window&&Notification.permission==='default')
+    Notification.requestPermission();
+}
+function toggleWA(){
+  waOn=document.getElementById('waToggle').checked;
+  localStorage.setItem('gc_id_wa',waOn?'1':'0');
+}
+function alertedSet(){
+  const today=new Date().toISOString().split('T')[0];
+  if(localStorage.getItem('gc_id_alerted_date')!==today){
+    localStorage.setItem('gc_id_alerted_date',today);
+    localStorage.setItem('gc_id_alerted','[]');
+  }
+  try{return new Set(JSON.parse(localStorage.getItem('gc_id_alerted')||'[]'));}catch(e){return new Set();}
+}
+function saveAlerted(set){localStorage.setItem('gc_id_alerted',JSON.stringify([...set]));}
+function checkAlerts(){
+  if(!alertsOn)return;
+  const seen=alertedSet();
+  const fresh=allSignals.filter(s=>s.signalType==='STRONG'&&!seen.has(s.ticker));
+  if(!fresh.length)return;
+  for(const s of fresh){
+    seen.add(s.ticker);
+    const dir=s.direction==='BULL'?'▲':'▼';
+    const title=`🔥 ${s.ticker} ${dir} ${s.score}/100 ${s.entryState==='TRIGGER'?('— '+s.tradeSignal+' NOW'):''}`;
+    const body=`₹${s.ltp} · Vol ${s.volRatio}× · RS ${s.rs!=null?s.rs+'%':'—'} · E ₹${s.entry} SL ₹${s.sl} T1 ₹${s.t1}`;
+    if('Notification'in window&&Notification.permission==='granted'){
+      try{new Notification(title,{body,tag:'gc-'+s.ticker});}catch(e){}
+    }
+    if(waOn){
+      fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:title+'\n'+body})}).catch(()=>{});
+    }
+  }
+  saveAlerted(seen);
+}
+
 // ── Boot ──────────────────────────────────────────────────
 setInterval(updateClock,1000);
 updateClock();
+
+// Restore alert toggle states
+document.getElementById('alertToggle').checked=alertsOn;
+document.getElementById('waToggle').checked=waOn;
+if(alertsOn&&'Notification'in window&&Notification.permission==='default')Notification.requestPermission();
 
 // Restore universe from today's localStorage
 if(loadUniverse()){

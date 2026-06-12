@@ -262,6 +262,9 @@ async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg) {
   // Must have a clear direction — no mixed signals
   if (!isBull && !isBear) return null;
 
+  // ── RSI hard filter — avoid exhaustion zones ──────────
+  if (curRSI != null && (curRSI > 80 || curRSI < 20)) return null;
+
   // ── Scoring engine (0-100) ────────────────────────────
   //   Volume surge    25 pts — heaviest weight; institutions leave volume footprints
   //   VWAP position   20 pts — institutional fair-value anchor
@@ -271,10 +274,12 @@ async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg) {
   //   RSI zone         5 pts — momentum not overextended
   let score = 0;
 
-  // 1. Volume — 25 pts
-  if      (volRatio >= 3.0) score += 25;
-  else if (volRatio >= 2.0) score += 20;
-  else if (volRatio >= 1.5) score += 12;
+  // 1. Volume — 25 pts (HARD GATE: relativeVolume < 1.5 → reject)
+  //    >= 3.0 exceptional · >= 2.0 valid breakout · >= 1.5 partial credit
+  if (volRatio < 1.5) return null;
+  if (volRatio >= 2.0) score += 25;
+  else                 score += 15;
+  const volExceptional = volRatio >= 3.0;
 
   // 2. VWAP — 20 pts
   if (aboveVWAP && isBull) score += 20;
@@ -314,18 +319,63 @@ async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg) {
   const signalType = score >= 80 ? 'STRONG' : 'WATCH';
   const direction  = isBull ? 'BULL' : 'BEAR';
 
-  // ── Entry / SL / Targets (ATR-based) ──────────────────
+  // ── ENTRY STATE MACHINE ───────────────────────────────
+  // DETECTED       score >= 70, no pullback yet — do not chase
+  // WAITING_ENTRY  price has pulled near EMA9 / VWAP — arm the trigger
+  // TRIGGER        pullback done + current candle breaks prev candle
+  //                high (bull) / low (bear) → actionable BUY / SELL
+  const PB_TOL = 1.002;                 // 0.2% proximity tolerance
+  const lookback = Math.min(6, tn);     // pullback window: last 6 candles
+  // global-row offset of today's first candle (for EMA9 lookup)
+  const offset = n - tn;
+
+  function nearSupport(i) {             // i = today index
+    const e9 = ema9Arr[offset + i], vw = vwapArr[i];
+    const r  = todayRows[i];
+    if (isBull) {
+      return (e9 != null && r.low <= e9 * PB_TOL) ||
+             (vw != null && r.low <= vw * PB_TOL);
+    }
+    return (e9 != null && r.high >= e9 / PB_TOL) ||
+           (vw != null && r.high >= vw / PB_TOL);
+  }
+
+  let pulledBack = false;
+  for (let i = tn - lookback; i <= tn; i++) {
+    if (i >= 0 && nearSupport(i)) { pulledBack = true; break; }
+  }
+
+  const prevCandle = todayRows[tn - 1];
+  const brokeOut = prevCandle
+    ? (isBull ? todayRows[tn].high > prevCandle.high
+              : todayRows[tn].low  < prevCandle.low)
+    : false;
+
+  let entryState, tradeSignal = null;
+  if (pulledBack && brokeOut) {
+    entryState  = 'TRIGGER';
+    tradeSignal = isBull ? 'BUY' : 'SELL';
+  } else if (pulledBack || nearSupport(tn)) {
+    entryState = 'WAITING_ENTRY';
+  } else {
+    entryState = 'DETECTED';
+  }
+
+  // ── Risk engine — ATR(14) based ───────────────────────
   const atrVal = curATR || (ltp * 0.015);
   let entry, sl, t1, t2;
 
   if (isBull) {
-    entry = +(todayRows[tn].high + 0.05).toFixed(2); // trigger above candle high
+    // trigger level = break of previous candle high (or current if no prev)
+    const trigHigh = prevCandle ? Math.max(prevCandle.high, todayRows[tn].high) : todayRows[tn].high;
+    entry = +(trigHigh + 0.05).toFixed(2);
     sl    = +(entry - atrVal).toFixed(2);
     const risk = entry - sl;
     t1 = +(entry + 1.5 * risk).toFixed(2);
     t2 = +(entry + 2.0 * risk).toFixed(2);
   } else {
-    entry = +(todayRows[tn].low - 0.05).toFixed(2);  // trigger below candle low
+    const trigLow = prevCandle ? Math.min(prevCandle.low, todayRows[tn].low) : todayRows[tn].low;
+    entry = +(trigLow - 0.05).toFixed(2);
     sl    = +(entry + atrVal).toFixed(2);
     const risk = sl - entry;
     t1 = +(entry - 1.5 * risk).toFixed(2);
@@ -358,6 +408,9 @@ async function scanSymbol(sym, prevClose, avgDailyVol, niftyData, cfg) {
     score,
     signalType,
     direction,
+    entryState,            // DETECTED | WAITING_ENTRY | TRIGGER
+    tradeSignal,           // BUY | SELL | null
+    volExceptional,
     entry, sl, t1, t2, rr,
     candles:    todayRows.length,
   };
@@ -378,6 +431,23 @@ module.exports = async (req, res) => {
     minPrice:  parseFloat(body?.minPrice)  || 50,
     minATRpct: parseFloat(body?.minATRpct) || 0.5,
   };
+
+  // ── NO-TRADE WINDOW: 09:15–09:30 IST ──────────────────
+  // Opening volatility trap — collect data only, no signals.
+  const istNow  = toIST(new Date());
+  const minsNow = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+  const inNoTradeWindow = minsNow >= 9 * 60 + 15 && minsNow < 9 * 60 + 30;
+  if (inNoTradeWindow) {
+    const hh2 = String(istNow.getUTCHours()).padStart(2, '0');
+    const mm2 = String(istNow.getUTCMinutes()).padStart(2, '0');
+    return res.status(200).json({
+      ok: true, noTradeWindow: true,
+      signals: [], strong: [], watch: [],
+      scanned: 0, found: 0, scanTime: `${hh2}:${mm2}`,
+      marketOpen: true, niftyChange: null,
+      message: 'No-trade window (09:15–09:30 IST) — collecting data only. Scanner starts 09:30.',
+    });
+  }
 
   // Fetch NIFTY once (used for RS calculation on every symbol)
   const niftyData = await fetchNifty().catch(() => null);
@@ -407,6 +477,7 @@ module.exports = async (req, res) => {
 
   return res.status(200).json({
     ok:          true,
+    noTradeWindow: false,
     signals:     results,          // all scored results (score >= 70), sorted
     strong,                        // score >= 80 — act now
     watch,                         // score 70-79 — monitor
